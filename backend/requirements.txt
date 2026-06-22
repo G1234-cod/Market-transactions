@@ -1,0 +1,31 @@
+# FastAPI 核心
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.19
+
+# 数据库
+aiomysql==0.2.0
+# PyMySQL 作为备用同步驱动
+pymysql==1.1.1
+
+# LLM API SDK
+# 阿里云百炼（Qwen-VL-Max）
+dashscope>=1.20.0
+# DeepSeek 官方 API（兼容 OpenAI SDK 格式）
+openai>=1.50.0
+
+# 配置与环境变量
+python-dotenv==1.0.1
+
+# 异步文件操作
+aiofiles==24.1.0
+
+# 图片处理（前端上传压缩时的服务端兜底）
+Pillow==11.1.0
+
+# Pydantic（FastAPI 依赖，显式锁定版本）
+pydantic==2.10.4
+
+# 测试
+pytest>=8.0.0
+pytest-asyncio>=0.24.0

@@ -1,0 +1,18 @@
+# 敏感配置（含 API Key）
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 上传图片
+static/uploads/*
+!static/uploads/.gitkeep
+
+# 日志
+*.log
