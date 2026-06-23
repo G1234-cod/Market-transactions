@@ -22,6 +22,10 @@ aiofiles==24.1.0
 
 # 图片处理（前端上传压缩时的服务端兜底）
 Pillow==11.1.0
+opencv-python==4.10.0.84
+
+# YOLO 损伤检测
+ultralytics==8.3.0
 
 # Pydantic（FastAPI 依赖，显式锁定版本）
 pydantic==2.10.4

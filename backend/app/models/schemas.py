@@ -106,3 +106,57 @@ class MarketItem(BaseModel):
     ai_generated_desc: str | None
     suggested_price: float | None
     created_at: str
+
+
+# ============================================================
+# 损伤检测
+# ============================================================
+
+class DamageType(str):
+    SCRATCH = "scratch"       # 划痕 - 红色
+    DENT = "dent"             # 凹陷 - 蓝色
+    CRACK = "crack"           # 裂纹 - 黄色
+    STAIN = "stain"           # 污渍 - 绿色
+    OTHER = "other"           # 其他 - 橙色
+
+
+DAMAGE_COLORS = {
+    DamageType.SCRATCH: (255, 0, 0),      # 红色
+    DamageType.DENT: (0, 0, 255),         # 蓝色
+    DamageType.CRACK: (255, 255, 0),      # 黄色
+    DamageType.STAIN: (0, 255, 0),         # 绿色
+    DamageType.OTHER: (255, 165, 0),      # 橙色
+}
+
+
+class DamageRegion(BaseModel):
+    """损伤区域"""
+    damage_type: str           # 损伤类型：scratch/dent/crack/stain/other
+    confidence: float          # 置信度 0-1
+    # 多边形顶点坐标（相对于原图）
+    polygon: list[list[float]]  # [[x1,y1], [x2,y2], [x3,y3], ...]
+
+
+class DamageDetectionResult(BaseModel):
+    """单张图片的损伤检测结果"""
+    image_url: str             # 原图URL
+    annotated_image_url: str   # 标注后的图片URL
+    regions: list[DamageRegion]  # 检测到的损伤区域列表
+    total_regions: int        # 总损伤区域数
+
+
+class DamageDetectionResponse(BaseModel):
+    """损伤检测响应"""
+    success: bool
+    data: list[DamageDetectionResult] | None = None
+    error: str | None = None
+
+
+class DamageDetectionRecord(BaseModel):
+    """数据库存储的损伤检测记录"""
+    id: int
+    published_item_id: int     # 关联的发布记录ID
+    original_image_url: str
+    annotated_image_url: str    # 标注图URL
+    regions_json: str          # 损伤区域JSON存储
+    created_at: str

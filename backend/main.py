@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import extract, generate, history, price, auth, market
+from app.routers import extract, generate, history, price, auth, market, damage
 
 app = FastAPI(title="智能二手商品发布助手", version="1.0.0")
 
@@ -25,6 +25,7 @@ app.include_router(generate.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(market.router, prefix="/api/v1")
+app.include_router(damage.router, prefix="/api/v1")
 
 # --- 挂载静态文件目录（图片访问）---
 os.makedirs("static/uploads", exist_ok=True)
