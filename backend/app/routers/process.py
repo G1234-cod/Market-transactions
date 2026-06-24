@@ -1,5 +1,5 @@
 """
-全链路图片处理路由：瑕疵检测 + 画框标注 + DeepSeek 定价
+全链路图片处理路由：瑕疵检测 + 画框标注 + DeepSeek 定价 + 数据库保存 + 预处理
 """
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from PIL import Image
@@ -13,6 +13,8 @@ from app.ml.defect_detector_yolo import DefectDetector
 from app.utils.image_utils import pil_to_base64, save_image
 from app.llm.deepseek_price_client import DeepSeekPriceClient
 from app.config import settings
+from app.db import crud
+from app.utils.preprocess import get_preprocessor  # 🆕 新增
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,6 @@ _price_client = None
 
 
 def get_detector():
-    """获取瑕疵检测器（单例）"""
     global _detector
     if _detector is None:
         _detector = DefectDetector()
@@ -31,7 +32,6 @@ def get_detector():
 
 
 def get_price_client():
-    """获取 DeepSeek 定价客户端（单例）"""
     global _price_client
     if _price_client is None:
         _price_client = DeepSeekPriceClient()
@@ -42,47 +42,69 @@ def get_price_client():
 async def process_image(
     image: UploadFile = File(...),
     user_id: int = Form(default=1),
+    item_id: int = Form(default=None),
     category: str = Form(default="手机"),
     brand: str = Form(default="Apple"),
     model: str = Form(default="iPhone 14 Pro"),
     market_avg_price: float = Form(default=5000)
 ):
     """
-    全链路图片处理：瑕疵检测 + 画框标注 + 结构化数据 + DeepSeek 定价
-    
-    返回：
-        - annotated_base64: 标注图
-        - defects: 前端展示的瑕疵列表（不含程度）
-        - defect_count: 瑕疵总数
-        - deepseek_data: 供 DeepSeek 定价用的数据
-        - price_suggestion: DeepSeek 定价建议
+    全链路图片处理：预处理 + 瑕疵检测 + 画框标注 + 结构化数据 + DeepSeek 定价 + 数据库保存
     """
     try:
-        # 1. 读取图片
         content = await image.read()
         pil_image = Image.open(io.BytesIO(content))
 
-        # 2. 瑕疵检测
-        detector = get_detector()
-        result = detector.process(pil_image)
+        # ============================================================
+        # 🆕 1. 图片预处理
+        # ============================================================
+        preprocessor = get_preprocessor(target_size=448)
+        preprocess_result = preprocessor.process(pil_image)
+        
+        if not preprocess_result['success']:
+            logger.warning(f"预处理警告: {preprocess_result['message']}")
+            processed_image = pil_image
+        else:
+            processed_image = preprocess_result['denoised']
+            logger.info(f"✅ 预处理完成: {preprocess_result['message']}")
 
-        # 3. 保存标注图
+        # ============================================================
+        # 2. 瑕疵检测（使用预处理后的图片）
+        # ============================================================
+        detector = get_detector()
+        result = detector.process(processed_image)
+
         uid = uuid.uuid4().hex
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"{timestamp}_{uid}"
         annotated_path = f"static/uploads/annotated/{base_name}.png"
         save_image(result['annotated'], annotated_path)
 
-        # 4. 生成 DeepSeek 定价数据
+        # ============================================================
+        # 3. 保存瑕疵数据到数据库
+        # ============================================================
+        if item_id:
+            try:
+                await crud.update_item_defects(
+                    item_id=item_id,
+                    annotated_url=annotated_path,
+                    defect_count=result['defect_count'],
+                    defect_data=result.get('defects_for_ds')
+                )
+                logger.info(f"✅ 瑕疵数据已保存到数据库: item_id={item_id}")
+            except Exception as e:
+                logger.error(f"保存瑕疵数据到数据库失败: {e}")
+
+        # ============================================================
+        # 4. DeepSeek 定价
+        # ============================================================
         deepseek_data = None
         price_suggestion = None
         
         if result['defect_count'] > 0 and result.get('defects_for_ds'):
-            # 构建 DeepSeek 输入数据
             defects_for_ds = result['defects_for_ds']
             deepseek_data = detector.get_defects_for_deepseek(defects_for_ds)
             
-            # 构建商品信息
             product_info = {
                 'category': category,
                 'brand': brand,
@@ -91,7 +113,6 @@ async def process_image(
                 'user_id': user_id
             }
             
-            # 调用 DeepSeek 定价
             try:
                 price_client = get_price_client()
                 price_suggestion = await price_client.get_price_suggestion(
@@ -107,21 +128,27 @@ async def process_image(
                     'suggestion': '定价服务暂时不可用'
                 }
 
+        # ============================================================
         # 5. 构建返回数据
+        # ============================================================
         response_data = {
             'success': True,
             'data': {
                 'annotated_base64': pil_to_base64(result['annotated']),
-                'defects': result['defects'],           # 前端展示（不含程度）
+                'defects': result['defects'],
                 'defect_count': result['defect_count']
             },
             'saved_files': {
                 'annotated': annotated_path
             },
+            'preprocess_info': {
+                'success': preprocess_result['success'],
+                'area_ratio': preprocess_result.get('area_ratio', 0.0),
+                'message': preprocess_result.get('message', '')
+            },
             'message': f"处理完成，检测到 {result['defect_count']} 个瑕疵"
         }
 
-        # 附加 DeepSeek 数据
         if deepseek_data:
             response_data['deepseek_data'] = deepseek_data
         
@@ -137,7 +164,6 @@ async def process_image(
 
 @router.get("/process/health")
 async def process_health():
-    """健康检查"""
     try:
         detector = get_detector()
         price_client = get_price_client()

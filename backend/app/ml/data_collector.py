@@ -1,6 +1,6 @@
 """
 错误数据收集器
-当本地模型与 Qwen 结果不一致时，保存错误图片和标签
+当本地模型与 Qwen 结果不一致时，保存错误图片、标签文件，并写入数据库
 """
 import os
 import json
@@ -21,10 +21,11 @@ class DataCollector:
         self.labels_dir = self.base_dir / "labels"
         self.metadata_dir = self.base_dir / "metadata"
         
-        # 创建目录
         self.images_dir.mkdir(parents=True, exist_ok=True)
         self.labels_dir.mkdir(parents=True, exist_ok=True)
         self.metadata_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"✅ 错误数据收集器初始化完成，保存目录: {self.base_dir}")
     
     def collect(
         self,
@@ -33,7 +34,8 @@ class DataCollector:
         correct_label: str,
         user_id: int,
         item_id: int = None,
-        confidence: float = 0.0
+        confidence: float = 0.0,
+        save_to_db: bool = True  # 🆕 控制是否存数据库
     ) -> dict:
         """
         收集错误数据
@@ -45,6 +47,7 @@ class DataCollector:
             user_id: 用户 ID
             item_id: 商品 ID（可选）
             confidence: 本地模型置信度（可选）
+            save_to_db: 是否保存到数据库
             
         Returns:
             dict: 保存结果
@@ -71,7 +74,7 @@ class DataCollector:
         
         logger.info(f"✅ 错误数据已收集: {filename}")
         
-        return {
+        result = {
             'success': True,
             'filename': filename,
             'image_path': str(img_path),
@@ -79,10 +82,35 @@ class DataCollector:
             'wrong_label': wrong_label,
             'correct_label': correct_label
         }
+        
+        # 🆕 3. 保存到数据库
+        if save_to_db:
+            try:
+                import asyncio
+                from app.db import crud
+                
+                # 获取当前事件循环，如果运行在 async 上下文中
+                try:
+                    loop = asyncio.get_running_loop()
+                    # 如果在 async 上下文中，创建任务异步执行
+                    asyncio.create_task(
+                        crud.insert_hard_case(
+                            image_url=str(img_path),
+                            wrong_label=wrong_label,
+                            correct_label=correct_label,
+                            user_id=user_id,
+                            item_id=item_id
+                        )
+                    )
+                except RuntimeError:
+                    # 如果没有运行中的事件循环，同步执行（不推荐）
+                    logger.warning("没有运行中的事件循环，跳过数据库保存")
+            except Exception as e:
+                logger.error(f"保存错误数据到数据库失败: {e}")
+        
+        return result
     
     def get_weekly_summary(self) -> dict:
-        """获取本周错误数据汇总"""
-        # 读取本周所有标签文件，生成汇总统计
         import re
         from collections import Counter
         
@@ -90,7 +118,6 @@ class DataCollector:
         for label_file in self.labels_dir.glob("*.txt"):
             with open(label_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # 解析错误和正确分类
                 wrong_match = re.search(r'错误分类.*?：(.*)', content)
                 correct_match = re.search(r'正确分类.*?：(.*)', content)
                 if wrong_match and correct_match:
@@ -99,7 +126,6 @@ class DataCollector:
                         'correct': correct_match.group(1).strip()
                     })
         
-        # 统计最常见的错误
         wrong_counter = Counter([p['wrong'] for p in error_pairs])
         correct_counter = Counter([p['correct'] for p in error_pairs])
         
@@ -111,7 +137,6 @@ class DataCollector:
         }
     
     def save_weekly_metadata(self):
-        """保存每周汇总 JSON"""
         summary = self.get_weekly_summary()
         week_num = datetime.now().strftime("%Y%W")
         metadata_path = self.metadata_dir / f"error_summary_{week_num}.json"

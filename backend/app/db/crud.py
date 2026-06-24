@@ -38,11 +38,9 @@ async def register_user(username: str, password: str) -> tuple[bool, int | None,
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            # 检查是否已存在
             await cur.execute("SELECT id FROM users WHERE username=%s", (username,))
             if await cur.fetchone():
                 return False, None, "用户名已被占用"
-            # 创建
             pw_hash = _hash_password(password)
             await cur.execute(
                 "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
@@ -77,7 +75,6 @@ async def query_price(brand: str, model: str) -> dict | None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            # 第1层：精确匹配
             await cur.execute(
                 "SELECT category, brand, model, avg_price, low_price, high_price "
                 "FROM market_prices WHERE brand=%s AND model=%s",
@@ -87,7 +84,6 @@ async def query_price(brand: str, model: str) -> dict | None:
             if row:
                 return row
 
-            # 第2层：模糊匹配（difflib）
             await cur.execute(
                 "SELECT category, brand, model, avg_price, low_price, high_price "
                 "FROM market_prices WHERE brand=%s",
@@ -101,8 +97,6 @@ async def query_price(brand: str, model: str) -> dict | None:
                     best_score, best = score, r
             if best and best_score > 0.7:
                 return best
-
-            # 第3层：无匹配
             return None
 
 
@@ -156,7 +150,6 @@ async def get_market_items(
     keyword: str = "",
     category: str = "",
 ) -> list[dict]:
-    """查询商城商品（全用户已发布 + JOIN users 获取用户名）"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -180,6 +173,106 @@ async def get_market_items(
 
 
 # ============================================================
+# 🆕 published_items — 瑕疵数据更新
+# ============================================================
+
+async def update_item_defects(
+    item_id: int,
+    bg_removed_url: str = None,
+    annotated_url: str = None,
+    defect_count: int = 0,
+    defect_data: list = None
+):
+    """
+    更新商品的瑕疵信息
+    
+    Args:
+        item_id: 商品ID
+        bg_removed_url: 去背景图URL
+        annotated_url: 标注图URL
+        defect_count: 瑕疵数量
+        defect_data: 瑕疵详细数据列表（含程度信息）
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            defect_json = json.dumps(defect_data, ensure_ascii=False) if defect_data else None
+            await cur.execute(
+                """UPDATE published_items 
+                   SET bg_removed_url = COALESCE(%s, bg_removed_url),
+                       annotated_url = COALESCE(%s, annotated_url),
+                       defect_count = %s,
+                       defect_data = %s,
+                       updated_at = NOW()
+                   WHERE id = %s""",
+                (bg_removed_url, annotated_url, defect_count, defect_json, item_id)
+            )
+
+
+async def get_item_by_id(item_id: int) -> dict | None:
+    """根据ID获取商品信息"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT * FROM published_items WHERE id = %s",
+                (item_id,)
+            )
+            return await cur.fetchone()
+
+
+# ============================================================
+# 🆕 hard_cases — 错误数据记录
+# ============================================================
+
+async def insert_hard_case(
+    image_url: str,
+    wrong_label: str,
+    correct_label: str,
+    user_id: int,
+    item_id: int = None,
+    model_version: str = None
+):
+    """
+    插入错误数据到 hard_cases 表
+    
+    Args:
+        image_url: 错误图片URL
+        wrong_label: 本地模型错误分类
+        correct_label: Qwen正确分类
+        user_id: 用户ID
+        item_id: 商品ID（可选）
+        model_version: 模型版本（可选）
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO hard_cases 
+                   (image_url, wrong_label, correct_label, user_id, item_id, model_version)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (image_url, wrong_label, correct_label, user_id, item_id, model_version)
+            )
+
+
+async def get_hard_cases(limit: int = 100) -> list[dict]:
+    """获取错误数据列表（用于训练）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """SELECT id, image_url, wrong_label, correct_label, user_id, 
+                          item_id, model_version, is_fixed, created_at
+                   FROM hard_cases 
+                   WHERE is_fixed = 0
+                   ORDER BY created_at DESC
+                   LIMIT %s""",
+                (limit,)
+            )
+            return await cur.fetchall()
+
+
+# ============================================================
 # ai_audit_logs — 审计日志
 # ============================================================
 
@@ -193,8 +286,6 @@ async def insert_audit_log(
     status: str,
     error_message: str | None = None,
 ):
-    import aiomysql
-
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
