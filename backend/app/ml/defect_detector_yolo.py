@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 import logging
 from pathlib import Path
 from app.utils.font_utils import get_chinese_font
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class DefectDetector:
 
     def __init__(self):
         """初始化检测器，加载模型"""
+        default_path = Path(settings.YOLO_MODEL_PATH)
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = None
         
