@@ -1,11 +1,21 @@
 """FastAPI 应用入口"""
 import os
-from app.routers import detect
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.routers import process
-from app.routers import extract, generate, history, price, auth, market, damage
+
+from app.routers import (
+    auth,
+    damage,
+    detect,
+    extract,
+    generate,
+    history,
+    market,
+    price,
+    process,
+)
 
 app = FastAPI(title="智能二手商品发布助手", version="1.0.0")
 
@@ -19,14 +29,14 @@ app.add_middleware(
 )
 
 # --- 挂载路由 ---
-app.include_router(extract.router, prefix="/api/v1")
-app.include_router(price.router, prefix="/api/v1")
-app.include_router(generate.router, prefix="/api/v1")
-app.include_router(history.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
-app.include_router(market.router, prefix="/api/v1")
 app.include_router(damage.router, prefix="/api/v1")
 app.include_router(detect.router, prefix="/api/v1")
+app.include_router(extract.router, prefix="/api/v1")
+app.include_router(generate.router, prefix="/api/v1")
+app.include_router(history.router, prefix="/api/v1")
+app.include_router(market.router, prefix="/api/v1")
+app.include_router(price.router, prefix="/api/v1")
 app.include_router(process.router, prefix="/api/v1")
 
 # --- 挂载静态文件目录（图片访问）---

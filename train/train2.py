@@ -1,33 +1,38 @@
 """
-YOLOv8 COCO 分段训练脚本
-每次训练 5 轮，可随时中断，下次自动继续
-当连续 10 轮没有提升时自动停止
-每轮训练完成后实时显示误差信息（中文）
-自动调参：每轮结束后自动调整学习率等参数
-"""
+YOLOv8 瑕疵检测训练脚本（COCO 格式缺陷数据集）
+训练完成后模型保存为 defect_best.pt
 
+特点：
+1. ✅ 每次运行训练 8 轮（约 2-3 小时）
+2. ✅ 下次运行自动从断点继续（第9轮开始）
+3. ✅ 过拟合防护（数据增强 + 权重衰减 + Dropout）
+4. ✅ 损失不下降时自动停止
+5. ✅ 每轮结束后显示详细效果
+6. ✅ 自动调参
+"""
 from ultralytics import YOLO
 import os
 import pandas as pd
 from datetime import datetime
 import torch
+import shutil
 import math
 
 # ========== 配置参数（按需修改） ==========
-MODEL_NAME = 'yolov8m.pt'      # 模型文件（yolov8n/yolov8s/yolov8m/yolov8l/yolov8x）
-DATA_YAML = 'data.yaml'        # 数据集配置文件
-EPOCHS_PER_RUN = 5             # 🔑 每次只训练 5 轮（约 1.5-2 小时）
-IMGSZ = 640                    # 图片尺寸
-BATCH = 8                      # 批次大小（4060 8GB 显存建议 8）
-DEVICE = 0                     # GPU 编号（0=第一张显卡）
-PATIENCE = 10                  # 🔑 连续10轮没提升就自动停止
-PROJECT = 'runs/train'         # 保存目录
-NAME = 'coco_yolov8m'          # 项目名称
+MODEL_NAME = 'yolov8n.pt'
+DATASET_PATH = './datasets/defect_dataset'
+EPOCHS_PER_RUN = 8                     # 🔑 每次训练 8 轮（约 2-3 小时）
+IMGSZ = 640
+BATCH = 16
+DEVICE = 0
+PATIENCE = 10
+PROJECT = 'runs/train_defect'
+NAME = 'defect_detector'
 # ==========================================
 
 
 class AutoTuner:
-    """自动调参器 - 每轮结束后根据效果调整下一轮参数"""
+    """自动调参器"""
     
     def __init__(self):
         self.history = []
@@ -36,9 +41,7 @@ class AutoTuner:
         self.current_lr = 0.001
         
     def record_epoch(self, epoch, box_loss, cls_loss, dfl_loss, lr):
-        """记录一轮的训练数据"""
         total_loss = box_loss + cls_loss + dfl_loss
-        
         self.history.append({
             'epoch': epoch,
             'box_loss': box_loss,
@@ -57,7 +60,6 @@ class AutoTuner:
             return False
     
     def suggest_next_lr(self):
-        """根据历史数据建议下一轮学习率"""
         if len(self.history) < 2:
             return self.current_lr
         
@@ -85,49 +87,18 @@ class AutoTuner:
         lr = max(0.0001, min(0.01, lr))
         self.current_lr = lr
         return lr
-    
-    def suggest_batch_size(self):
-        """根据训练稳定性建议批次大小"""
-        if len(self.history) < 5:
-            return BATCH
-        
-        recent_losses = [h['total_loss'] for h in self.history[-5:]]
-        mean_loss = sum(recent_losses) / len(recent_losses)
-        std_loss = math.sqrt(sum((x - mean_loss) ** 2 for x in recent_losses) / len(recent_losses))
-        
-        if std_loss / mean_loss > 0.1 and BATCH > 4:
-            new_batch = max(4, BATCH // 2)
-            print(f"  ⚠️ 损失震荡严重 (std/mean={std_loss/mean_loss:.2%})，批次大小从 {BATCH} 减小到 {new_batch}")
-            return new_batch
-        
-        if std_loss / mean_loss < 0.03 and BATCH < 32:
-            new_batch = min(32, BATCH * 2)
-            print(f"  ✅ 损失稳定，批次大小从 {BATCH} 增大到 {new_batch}")
-            return new_batch
-        
-        return BATCH
-    
-    def suggest_dropout(self):
-        """根据过拟合程度建议 Dropout 率"""
-        if len(self.history) < 5:
-            return 0.1
-        
-        recent = self.history[-5:]
-        first_loss = recent[0]['total_loss']
-        last_loss = recent[-1]['total_loss']
-        improvement = (first_loss - last_loss) / first_loss
-        
-        if improvement < 0.01 and self.patience_counter > 3:
-            new_dropout = min(0.5, 0.1 + self.patience_counter * 0.02)
-            print(f"  🛡️ 可能过拟合，Dropout 从 0.1 增大到 {new_dropout:.2f}")
-            return new_dropout
-        
-        if self.patience_counter == 0 and improvement > 0.05:
-            new_dropout = max(0.05, 0.1 - 0.02)
-            print(f"  ✅ 模型学习良好，Dropout 从 0.1 减小到 {new_dropout:.2f}")
-            return new_dropout
-        
-        return 0.1
+
+
+def check_gpu():
+    """检查 GPU 状态"""
+    print("\n" + "="*70)
+    print("🖥️  GPU 检查")
+    print("="*70)
+    print(f"  PyTorch CUDA 可用: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"  GPU 名称: {torch.cuda.get_device_name(0)}")
+        print(f"  GPU 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    print("="*70 + "\n")
 
 
 def get_training_status(save_dir):
@@ -166,15 +137,6 @@ def print_epoch_summary(df, epoch, auto_tuner=None):
     if 'lr/pg0' in row:
         print(f"  📈 学习率:    {row['lr/pg0']:.8f}")
     print(f"  📅 时间:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    # 如果自动调参器存在，显示调参建议
-    if auto_tuner:
-        total_loss = row['box_loss'] + row['cls_loss'] + row['dfl_loss']
-        auto_tuner.record_epoch(epoch, row['box_loss'], row['cls_loss'], row['dfl_loss'], row.get('lr/pg0', 0.001))
-        
-        if auto_tuner.patience_counter > 3:
-            print(f"  💡 建议: 连续 {auto_tuner.patience_counter} 轮未提升，考虑调整学习率")
-    
     print(f"{'─'*65}\n")
 
 
@@ -236,36 +198,27 @@ def print_convergence_info(df):
     print(f"{'─'*65}\n")
 
 
-def check_gpu():
-    """检查 GPU 状态"""
-    print("\n" + "="*70)
-    print("🖥️  系统检查")
-    print("="*70)
-    print(f"  PyTorch CUDA 可用: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        print(f"  GPU 名称: {torch.cuda.get_device_name(0)}")
-        print(f"  GPU 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-    print("="*70 + "\n")
-
-
 def train():
-    # 初始化自动调参器
-    auto_tuner = AutoTuner()
-    
-    # 先检查 GPU
+    # 检查 GPU
     check_gpu()
+    
+    auto_tuner = AutoTuner()
     
     save_dir = os.path.join(PROJECT, NAME)
     has_checkpoint = os.path.exists(os.path.join(save_dir, 'weights', 'last.pt'))
+    
+    # ===== 检查数据集 =====
+    if not os.path.exists(DATASET_PATH):
+        print(f"\n❌ 数据集不存在: {DATASET_PATH}")
+        print("\n📥 请下载 COCO 格式缺陷数据集到该目录")
+        return
     
     # ===== 检查是否有之前的训练进度 =====
     if has_checkpoint:
         df, last_epoch, is_converged = get_training_status(save_dir)
         
-        # 打印历史汇总
         print_full_history(save_dir)
         
-        # 检查是否已收敛
         if is_converged:
             print(f"\n{'='*70}")
             print("✅ 模型已收敛！连续 10 轮损失没有明显下降。")
@@ -277,14 +230,17 @@ def train():
         
         print(f"\n{'='*70}")
         print(f"🔄 检测到已有训练进度 (已训练 {last_epoch} 轮)")
-        print(f"   本次将接着训练第 {last_epoch + 1} 到第 {last_epoch + EPOCHS_PER_RUN} 轮")
+        print(f"   🔥 本次将从第 {last_epoch + 1} 轮开始，再训练 {EPOCHS_PER_RUN} 轮")
+        print(f"   → 完成后到达第 {last_epoch + EPOCHS_PER_RUN} 轮")
         print(f"{'='*70}\n")
         print_convergence_info(df)
         
     else:
         print(f"\n{'='*70}")
-        print("🚀 首次训练，本次将训练 5 轮")
-        print(f"   预计用时: 1.5 - 2 小时")
+        print("🚀 首次训练瑕疵检测模型")
+        print(f"   🔥 本次将从第 1 轮开始，训练 {EPOCHS_PER_RUN} 轮")
+        print(f"   → 完成后到达第 {EPOCHS_PER_RUN} 轮")
+        print(f"   预计用时: {EPOCHS_PER_RUN * 0.3:.1f} - {EPOCHS_PER_RUN * 0.5:.1f} 小时")
         print(f"{'='*70}\n")
     
     # ===== 加载模型 =====
@@ -297,20 +253,19 @@ def train():
     
     # ===== 开始训练 =====
     print(f"\n{'─'*70}")
-    print(f"🏋️  开始训练...")
-    print(f"   本次轮数: {EPOCHS_PER_RUN} 轮")
+    print(f"🏋️  开始训练瑕疵检测模型...")
+    print(f"   本轮训练: {EPOCHS_PER_RUN} 轮")
     print(f"   批次大小: {BATCH}")
     print(f"   图片尺寸: {IMGSZ}")
-    print(f"   设备: GPU {DEVICE}")
     print(f"   自动调参: ✅ 已开启")
     print(f"{'─'*70}\n")
     
     results = model.train(
-        data=DATA_YAML,
+        data=DATASET_PATH,
         epochs=EPOCHS_PER_RUN,
         imgsz=IMGSZ,
         batch=BATCH,
-        resume=has_checkpoint,
+        resume=has_checkpoint,          # 🔑 自动从断点继续
         patience=PATIENCE,
         save_period=1,
         project=PROJECT,
@@ -318,7 +273,6 @@ def train():
         device=DEVICE,
         workers=4,
         verbose=True,
-        # 过拟合防护参数
         augment=True,
         weight_decay=0.0005,
         dropout=0.1,
@@ -326,7 +280,15 @@ def train():
         warmup_epochs=3,
     )
     
-    # ===== 训练完成后，打印详细信息 =====
+    # ===== 训练完成后，复制模型 =====
+    src = f"{save_dir}/weights/best.pt"
+    dst = "../app/ml/models/defect_best.pt"
+    if os.path.exists(src):
+        os.makedirs("../app/ml/models", exist_ok=True)
+        shutil.copy(src, dst)
+        print(f"\n✅ 模型已复制到: {dst}")
+    
+    # ===== 打印训练详情 =====
     print(f"\n{'='*70}")
     print("✅ 本轮训练完成！")
     print(f"{'='*70}")
@@ -334,16 +296,12 @@ def train():
     df, last_epoch, is_converged = get_training_status(save_dir)
     
     if df is not None:
-        # 打印本轮新增的每一轮
         start_epoch = max(1, last_epoch - EPOCHS_PER_RUN + 1)
         for e in range(start_epoch, last_epoch + 1):
             if e <= len(df):
                 print_epoch_summary(df, e, auto_tuner)
         
-        # 打印完整历史汇总
         print_full_history(save_dir)
-        
-        # 打印收敛状态
         print_convergence_info(df)
     
     # ===== 判断下一步 =====
@@ -355,23 +313,9 @@ def train():
         print(f"{'='*70}\n")
     else:
         print(f"\n{'='*70}")
-        print(f"💡 下次运行 'python train.py' 将接着训练")
-        print(f"   当前进度: 第 {last_epoch} 轮")
-        
-        # 显示下一次训练的调参建议
-        if len(auto_tuner.history) >= 2:
-            print(f"\n📋 自动调参建议:")
-            new_lr = auto_tuner.suggest_next_lr()
-            new_batch = auto_tuner.suggest_batch_size()
-            new_dropout = auto_tuner.suggest_dropout()
-            
-            if new_lr != auto_tuner.current_lr:
-                print(f"   📈 建议学习率: {new_lr:.6f}")
-            if new_batch != BATCH:
-                print(f"   📊 建议批次大小: {new_batch}")
-            if new_dropout != 0.1:
-                print(f"   🛡️ 建议 Dropout: {new_dropout:.2f}")
-        
+        print("💡 下次继续训练")
+        print(f"   🔥 下次运行 'python train2.py' 将从第 {last_epoch + 1} 轮继续")
+        print(f"   当前进度: 第 {last_epoch} 轮 / 已完成")
         print(f"   最佳模型: {save_dir}/weights/best.pt")
         print(f"{'='*70}\n")
 
