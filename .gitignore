@@ -27,3 +27,5 @@ frontend/.vite/
 # OS
 .DS_Store
 Thumbs.db
+数据集/val2017.zip
+数据集/annotations_trainval2017.zip
