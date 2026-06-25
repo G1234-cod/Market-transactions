@@ -15,6 +15,7 @@ from app.llm.deepseek_price_client import DeepSeekPriceClient
 from app.config import settings
 from app.db import crud
 from app.utils.preprocess import get_preprocessor
+from app.utils.file_validator import validate_upload_file
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,27 @@ async def process_image(
     全链路图片处理：预处理 + 瑕疵检测 + 画框标注 + 结构化数据 + DeepSeek 定价 + 数据库保存
     """
     try:
-        content = await image.read()
+        # ============================================================
+        # ✅ 1. 文件上传校验
+        # ============================================================
+        try:
+            file_content, safe_filename = await validate_upload_file(
+                file=image,
+                max_size=settings.MAX_UPLOAD_SIZE,
+                check_content=True
+            )
+            content = file_content
+        except HTTPException as e:
+            await image.seek(0)
+            raise e
+        except Exception as e:
+            await image.seek(0)
+            raise HTTPException(status_code=400, detail=f"文件验证失败: {str(e)}")
+        
         pil_image = Image.open(io.BytesIO(content))
 
         # ============================================================
-        # 1. 图片预处理
+        # 2. 图片预处理
         # ============================================================
         preprocessor = get_preprocessor(target_size=448)
         preprocess_result = preprocessor.process(pil_image)
@@ -69,18 +86,16 @@ async def process_image(
             logger.info(f"✅ 预处理完成: {preprocess_result['message']}")
 
         # ============================================================
-        # 2. 瑕疵检测（使用预处理后的图片）
+        # 3. 瑕疵检测（使用预处理后的图片）
         # ============================================================
         detector = get_detector()
         result = detector.process(processed_image)
 
-        # 日志：检查 result 内容
         logger.info(f"📊 result keys: {result.keys()}")
         logger.info(f"📊 defect_count: {result.get('defect_count', 0)}")
-        logger.info(f"📊 annotated type: {type(result.get('annotated'))}")
 
         # ============================================================
-        # 3. 保存标注图
+        # 4. 保存标注图
         # ============================================================
         uid = uuid.uuid4().hex
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -96,7 +111,7 @@ async def process_image(
             logger.warning("⚠️ result['annotated'] 为 None，无法保存标注图")
 
         # ============================================================
-        # 4. 保存瑕疵数据到数据库
+        # 5. 保存瑕疵数据到数据库
         # ============================================================
         if item_id:
             try:
@@ -111,7 +126,7 @@ async def process_image(
                 logger.error(f"保存瑕疵数据到数据库失败: {e}")
 
         # ============================================================
-        # 5. DeepSeek 定价
+        # 6. DeepSeek 定价
         # ============================================================
         deepseek_data = None
         price_suggestion = None
@@ -144,7 +159,7 @@ async def process_image(
                 }
 
         # ============================================================
-        # 6. 构建返回数据
+        # 7. 构建返回数据
         # ============================================================
         response_data = {
             'success': True,
@@ -161,6 +176,10 @@ async def process_image(
                 'area_ratio': preprocess_result.get('area_ratio', 0.0),
                 'message': preprocess_result.get('message', '')
             },
+            'file_info': {
+                'original_filename': safe_filename,
+                'file_size': len(content)
+            },
             'message': f"处理完成，检测到 {result['defect_count']} 个瑕疵"
         }
 
@@ -172,6 +191,8 @@ async def process_image(
 
         return response_data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"图片处理失败: {e}")
         raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")

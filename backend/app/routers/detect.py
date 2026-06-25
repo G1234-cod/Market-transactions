@@ -7,7 +7,9 @@ import io
 import logging
 
 from app.ml.yolo_detector import YOLODetector
-from app.utils.preprocess import get_preprocessor  # 🆕 新增
+from app.utils.preprocess import get_preprocessor
+from app.utils.file_validator import validate_upload_file
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +29,27 @@ def get_detector():
 async def yolo_detect(image: UploadFile = File(...)):
     """使用 YOLOv8 检测图片中的物品"""
     try:
-        content = await image.read()
+        # ============================================================
+        # ✅ 1. 文件上传校验
+        # ============================================================
+        try:
+            file_content, safe_filename = await validate_upload_file(
+                file=image,
+                max_size=settings.MAX_UPLOAD_SIZE,
+                check_content=True
+            )
+            content = file_content
+        except HTTPException as e:
+            await image.seek(0)
+            raise e
+        except Exception as e:
+            await image.seek(0)
+            raise HTTPException(status_code=400, detail=f"文件验证失败: {str(e)}")
+        
         pil_image = Image.open(io.BytesIO(content))
 
         # ============================================================
-        # 🆕 图片预处理
+        # 2. 图片预处理
         # ============================================================
         preprocessor = get_preprocessor(target_size=448)
         preprocess_result = preprocessor.process(pil_image)
@@ -52,6 +70,10 @@ async def yolo_detect(image: UploadFile = File(...)):
             'detections': result['detections'],
             'annotated_image': result['annotated_base64'],
             'model': 'yolov8',
+            'file_info': {
+                'original_filename': safe_filename,
+                'file_size': len(content)
+            },
             'preprocess_info': {
                 'success': preprocess_result['success'],
                 'area_ratio': preprocess_result.get('area_ratio', 0.0),
@@ -59,6 +81,8 @@ async def yolo_detect(image: UploadFile = File(...)):
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"检测失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

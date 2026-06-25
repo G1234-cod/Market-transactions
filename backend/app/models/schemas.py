@@ -78,7 +78,10 @@ class GenerateSaveRequest(BaseModel):
     desc: str
     price: float
     status: str = "published"
-    category: str = ""  # 🆕 品类字段（用于以图搜图索引）
+    category: Optional[str] = None      # ✅ 改为 Optional
+    brand: Optional[str] = None         # ✅ 新增
+    model: Optional[str] = None         # ✅ 新增
+    condition: Optional[str] = None     # ✅ 新增
 
 
 # ============================================================

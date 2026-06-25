@@ -1,24 +1,40 @@
 """
 以图搜图 + 以文搜图 API
 """
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from PIL import Image
 import io
 import logging
+import requests
 
 from app.ml.clip_extractor import get_extractor
 from app.ml.qdrant_client import get_qdrant
 from app.db import crud
+from app.config import get_static_url, get_base_url
+from app.dependencies import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["以图搜图"])
 
 
+def build_image_url(image_url: str) -> str:
+    """构建完整的图片 URL"""
+    if not image_url:
+        return ""
+    if image_url.startswith("http://") or image_url.startswith("https://"):
+        return image_url
+    if image_url.startswith("/static/"):
+        return f"{get_base_url()}{image_url}"
+    return get_static_url(image_url)
+
+
 @router.post("/search/image")
 async def search_by_image(
     image: UploadFile = File(...),
-    top_k: int = Form(10)
+    top_k: int = Form(10),
+    filter_category: str = Form(default=""),
+    user_id: int = Depends(get_current_user_optional),
 ):
     """
     以图搜图：上传图片，返回相似商品列表
@@ -31,17 +47,26 @@ async def search_by_image(
         vector = extractor.extract_image(pil_image)
 
         qdrant = get_qdrant()
-        results = qdrant.search(vector, top_k)
+        results = qdrant.search(
+            vector=vector,
+            top_k=top_k,
+            filter_category=filter_category if filter_category else None,  # ✅ 直接传字符串
+        )
 
         items = []
-        for item_id, score, payload in results:
+        for r in results:
+            item_id = r["id"]
+            score = r["score"]
+            payload = r["payload"] or {}
+
             item = await crud.get_item_by_id(item_id)
             if item and item.get('status') == 'published':
+                img_url = build_image_url(item.get("original_image_url", ""))
                 items.append({
                     'id': item['id'],
                     'title': item.get('ai_generated_title', '未命名商品'),
                     'price': float(item['suggested_price']) if item['suggested_price'] else None,
-                    'image_url': item['original_image_url'],
+                    'image_url': img_url,
                     'category': item.get('category'),
                     'similarity': round(score, 4)
                 })
@@ -61,11 +86,12 @@ async def search_by_image(
 async def search_by_text(
     text: str = Form(..., description="商品描述文本"),
     top_k: int = Form(10, description="返回结果数量"),
-    category: str = Form(None, description="筛选品类（可选）")
+    category: str = Form(None, description="筛选品类（可选）"),
+    user_id: int = Depends(get_current_user_optional),
 ):
     """
     以文搜图：输入文字描述，返回匹配的商品列表
-    
+
     示例：
     - 搜索 "红色手机" → 返回匹配的商品
     - 搜索 "iPhone 13" → 返回 iPhone 13 相关商品
@@ -76,25 +102,29 @@ async def search_by_text(
         extractor = get_extractor()
         vector = extractor.extract_text(text)
 
-        # 2. 构建过滤条件
-        filter_condition = None
-        if category:
-            filter_condition = {'category': category}
-
-        # 3. Qdrant 检索
+        # 2. Qdrant 检索 ✅ 直接传入 category 字符串
         qdrant = get_qdrant()
-        results = qdrant.search(vector, top_k, filter_condition)
+        results = qdrant.search(
+            vector=vector,
+            top_k=top_k,
+            filter_category=category if category else None,  # ✅ 直接传字符串
+        )
 
-        # 4. 查询商品详情
+        # 3. 查询商品详情
         items = []
-        for item_id, score, payload in results:
+        for r in results:
+            item_id = r["id"]
+            score = r["score"]
+            payload = r["payload"] or {}
+
             item = await crud.get_item_by_id(item_id)
             if item and item.get('status') == 'published':
+                img_url = build_image_url(item.get("original_image_url", ""))
                 items.append({
                     'id': item['id'],
                     'title': item.get('ai_generated_title', '未命名商品'),
                     'price': float(item['suggested_price']) if item['suggested_price'] else None,
-                    'image_url': item['original_image_url'],
+                    'image_url': img_url,
                     'category': item.get('category'),
                     'similarity': round(score, 4)
                 })
@@ -115,23 +145,39 @@ async def add_to_index(
     item_id: int = Form(...),
     image_url: str = Form(...),
     title: str = Form(""),
-    category: str = Form("")
+    category: str = Form(""),
+    user_id: int = Depends(get_current_user_optional),
 ):
     """商品上架时加入索引"""
     try:
-        import requests
-        response = requests.get(image_url, timeout=10)
+        full_url = build_image_url(image_url)
+        if not full_url:
+            raise HTTPException(status_code=400, detail="无效的图片URL")
+
+        response = requests.get(full_url, timeout=15)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="图片下载失败")
+
         pil_image = Image.open(io.BytesIO(response.content))
 
         extractor = get_extractor()
         vector = extractor.extract_image(pil_image)
 
-        payload = {'item_id': item_id, 'title': title, 'category': category}
+        payload = {
+            'title': title,
+            'category': category,
+        }
         qdrant = get_qdrant()
         qdrant.add_item(item_id, vector, payload)
 
-        return {'success': True, 'item_id': item_id, 'message': '已加入索引'}
+        return {
+            'success': True,
+            'item_id': item_id,
+            'message': '已加入索引'
+        }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"加入索引失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -140,9 +186,34 @@ async def add_to_index(
 @router.get("/search/stats")
 async def search_stats():
     """获取索引统计信息"""
-    qdrant = get_qdrant()
-    return {
-        'total_items': qdrant.count(),
-        'collection': qdrant.COLLECTION_NAME,
-        'vector_size': qdrant.VECTOR_SIZE
-    }
+    try:
+        qdrant = get_qdrant()
+        return {
+            'total_items': qdrant.count(),
+            'collection': qdrant.collection_name,
+            'vector_size': qdrant.vector_size,
+            'host': qdrant.host,
+            'port': qdrant.port
+        }
+    except Exception as e:
+        logger.error(f"获取统计信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/search/health")
+async def search_health():
+    """健康检查"""
+    try:
+        extractor = get_extractor()
+        qdrant = get_qdrant()
+        return {
+            "status": "healthy",
+            "clip_model": extractor.model_name,
+            "qdrant_collection": qdrant.collection_name,
+            "qdrant_count": qdrant.count()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e)
+        }
