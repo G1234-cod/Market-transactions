@@ -4,6 +4,7 @@ YOLOv8 COCO 分段训练脚本
 当连续 10 轮没有提升时自动停止
 每轮训练完成后实时显示误差信息（中文）
 自动调参：每轮结束后自动调整学习率等参数
+自动检测GPU/CPU
 """
 
 from ultralytics import YOLO
@@ -19,7 +20,16 @@ DATA_YAML = 'data.yaml'        # 数据集配置文件
 EPOCHS_PER_RUN = 5             # 🔑 每次只训练 5 轮（约 1.5-2 小时）
 IMGSZ = 640                    # 图片尺寸
 BATCH = 8                      # 批次大小（4060 8GB 显存建议 8）
-DEVICE = 0                     # GPU 编号（0=第一张显卡）
+
+# 🔑 自动检测设备（GPU或CPU）
+if torch.cuda.is_available():
+    DEVICE = 0                 # GPU编号（0=第一张显卡）
+    print(f"✅ GPU可用: {torch.cuda.get_device_name(0)}")
+    print(f"   显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+else:
+    DEVICE = 'cpu'             # 使用CPU
+    print("⚠️ 未检测到GPU，将使用CPU训练（速度会很慢）")
+
 PATIENCE = 10                  # 🔑 连续10轮没提升就自动停止
 PROJECT = 'runs/train'         # 保存目录
 NAME = 'coco_yolov8m'          # 项目名称
@@ -245,6 +255,9 @@ def check_gpu():
     if torch.cuda.is_available():
         print(f"  GPU 名称: {torch.cuda.get_device_name(0)}")
         print(f"  GPU 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        print(f"  使用设备: GPU 0")
+    else:
+        print(f"  使用设备: CPU")
     print("="*70 + "\n")
 
 
@@ -301,7 +314,7 @@ def train():
     print(f"   本次轮数: {EPOCHS_PER_RUN} 轮")
     print(f"   批次大小: {BATCH}")
     print(f"   图片尺寸: {IMGSZ}")
-    print(f"   设备: GPU {DEVICE}")
+    print(f"   设备: {'GPU 0' if DEVICE == 0 else 'CPU'}")
     print(f"   自动调参: ✅ 已开启")
     print(f"{'─'*70}\n")
     
@@ -315,7 +328,7 @@ def train():
         save_period=1,
         project=PROJECT,
         name=NAME,
-        device=DEVICE,
+        device=DEVICE,  # 自动选择的设备
         workers=4,
         verbose=True,
         # 过拟合防护参数

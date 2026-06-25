@@ -6,18 +6,19 @@ import time
 import base64
 import logging
 
-from fastapi import APIRouter, UploadFile, File, Form, Request
+from fastapi import APIRouter, UploadFile, File, Form, Request, HTTPException
 import aiofiles
 
 from app.config import settings
 from app.models.schemas import ExtractResponse, ExtractResult
 from app.services import vision_service, audit_service
 from app.llm.qwen_vl_client import QwenVLClient, EXTRACT_SYSTEM_PROMPT
+from app.utils.file_validator import validate_upload_file
 
 # 导入双模型比对相关模块
 from app.ml.yolo_detector import YOLODetector
 from app.ml.data_collector import DataCollector
-from app.utils.preprocess import get_preprocessor  # 🆕 新增
+from app.utils.preprocess import get_preprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def get_yolo_detector():
 
 
 def get_data_collector():
-    global _data_collector
+    global _data_collector    
     if _data_collector is None:
         _data_collector = DataCollector()
     return _data_collector
@@ -58,13 +59,29 @@ async def extract(
     start_time = time.time()
 
     # ============================================================
-    # 1. 保存图片到本地
+    # ✅ 1. 文件上传校验
     # ============================================================
-    ext = os.path.splitext(image.filename or "image.jpg")[1] or ".jpg"
+    try:
+        file_content, safe_filename = await validate_upload_file(
+            file=image,
+            max_size=settings.MAX_UPLOAD_SIZE,
+            check_content=True
+        )
+        content = file_content
+    except HTTPException as e:
+        await image.seek(0)
+        raise e
+    except Exception as e:
+        await image.seek(0)
+        raise HTTPException(status_code=400, detail=f"文件验证失败: {str(e)}")
+
+    # ============================================================
+    # 2. 保存图片到本地
+    # ============================================================
+    ext = os.path.splitext(safe_filename or "image.jpg")[1] or ".jpg"
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(settings.UPLOAD_DIR, filename)
 
-    content = await image.read()
     async with aiofiles.open(filepath, "wb") as f:
         await f.write(content)
 
@@ -75,7 +92,7 @@ async def extract(
     pil_image = Image.open(io.BytesIO(content))
 
     # ============================================================
-    # 🆕 2. 图片预处理
+    # 3. 图片预处理
     # ============================================================
     preprocessor = get_preprocessor(target_size=448)
     preprocess_result = preprocessor.process(pil_image)
@@ -88,7 +105,7 @@ async def extract(
         logger.info(f"✅ 预处理完成: {preprocess_result['message']}")
 
     # ============================================================
-    # 3. 调用 Qwen-VL-Max 视觉识别
+    # 4. 调用 Qwen-VL-Max 视觉识别
     # ============================================================
     success = True
     error_msg = None
@@ -121,13 +138,12 @@ async def extract(
         logger.error(f"Qwen 识别失败: {e}")
 
     # ============================================================
-    # 4. 双模型比对 + 错误数据收集
+    # 5. 双模型比对 + 错误数据收集
     # ============================================================
     item_id = filename
 
     try:
         yolo_detector = get_yolo_detector()
-        # YOLO 也使用预处理后的图片
         yolo_result = yolo_detector.predict(processed_image)
         
         if yolo_result['detections']:
@@ -159,12 +175,12 @@ async def extract(
         logger.error(f"双模型比对失败: {e}")
 
     # ============================================================
-    # 5. 审计日志
+    # 6. 审计日志
     # ============================================================
     await audit_service.log_vision_call(
         user_id=user_id,
         model_name=settings.QWEN_VL_MODEL,
-        input_summary=f"图片: {image.filename} ({len(content)} bytes)",
+        input_summary=f"图片: {safe_filename} ({len(content)} bytes)",
         raw_response=raw_response,
         start_time=start_time,
         success=success,
@@ -172,7 +188,7 @@ async def extract(
     )
 
     # ============================================================
-    # 6. 返回结果
+    # 7. 返回结果
     # ============================================================
     return ExtractResponse(
         success=success,

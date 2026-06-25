@@ -1,6 +1,7 @@
 """数据库 CRUD 操作"""
 import json
 from difflib import SequenceMatcher
+from typing import Optional, List, Dict, Any
 
 import aiomysql
 
@@ -47,6 +48,18 @@ async def register_user(username: str, password: str) -> tuple[bool, int | None,
                 (username, pw_hash),
             )
             return True, cur.lastrowid, "注册成功"
+
+
+async def get_user_by_id(user_id: int) -> dict | None:
+    """根据ID获取用户信息"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT id, username, created_at FROM users WHERE id = %s",
+                (user_id,)
+            )
+            return await cur.fetchone()
 
 
 async def authenticate_user(username: str, password: str) -> tuple[bool, int | None, str]:
@@ -111,14 +124,40 @@ async def insert_published_item(
     desc: str,
     price: float,
     status: str = "published",
+    category: str = None,           # ✅ 新增
+    brand: str = None,              # ✅ 新增
+    model: str = None,              # ✅ 新增
+    condition: str = None,          # ✅ 新增
 ) -> int:
+    """
+    插入发布记录
+    
+    Args:
+        user_id: 用户ID
+        image_url: 图片URL
+        title: 标题
+        desc: 描述
+        price: 价格
+        status: 状态 (published/draft)
+        category: 品类
+        brand: 品牌
+        model: 型号
+        condition: 成色
+    
+    Returns:
+        int: 商品ID
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "INSERT INTO published_items (user_id, original_image_url, ai_generated_title, "
-                "ai_generated_desc, suggested_price, status) VALUES (%s, %s, %s, %s, %s, %s)",
-                (user_id, image_url, title, desc, price, status),
+                """INSERT INTO published_items 
+                   (user_id, original_image_url, ai_generated_title, 
+                    ai_generated_desc, suggested_price, status, category, 
+                    brand, model, `condition`) 
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (user_id, image_url, title, desc, price, status, 
+                 category, brand, model, condition)
             )
             return cur.lastrowid
 
@@ -139,7 +178,8 @@ async def get_history(user_id: int) -> list[dict]:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
                 "SELECT id, user_id, original_image_url, ai_generated_title, "
-                "ai_generated_desc, suggested_price, status, created_at "
+                "ai_generated_desc, suggested_price, status, category, "
+                "brand, model, `condition`, created_at "
                 "FROM published_items WHERE user_id=%s ORDER BY created_at DESC LIMIT 50",
                 (user_id,),
             )
@@ -155,7 +195,8 @@ async def get_market_items(
         async with conn.cursor(aiomysql.DictCursor) as cur:
             sql = (
                 "SELECT p.id, p.user_id, u.username, p.original_image_url, "
-                "p.ai_generated_title, p.ai_generated_desc, p.suggested_price, p.created_at "
+                "p.ai_generated_title, p.ai_generated_desc, p.suggested_price, "
+                "p.category, p.created_at "
                 "FROM published_items p JOIN users u ON p.user_id = u.id "
                 "WHERE p.status = 'published'"
             )
@@ -165,15 +206,15 @@ async def get_market_items(
                 kw = f"%{keyword}%"
                 params.extend([kw, kw])
             if category:
-                sql += " AND p.ai_generated_title LIKE %s"
-                params.append(f"%{category}%")
+                sql += " AND p.category = %s"  # ✅ 使用 category 字段
+                params.append(category)
             sql += " ORDER BY p.created_at DESC LIMIT 100"
             await cur.execute(sql, params)
             return await cur.fetchall()
 
 
 # ============================================================
-# 🆕 published_items — 瑕疵数据更新
+# published_items — 瑕疵数据更新
 # ============================================================
 
 async def update_item_defects(
@@ -222,7 +263,7 @@ async def get_item_by_id(item_id: int) -> dict | None:
 
 
 # ============================================================
-# 🆕 hard_cases — 错误数据记录
+# hard_cases — 错误数据记录（增强版，支持数据飞轮）
 # ============================================================
 
 async def insert_hard_case(
@@ -231,10 +272,13 @@ async def insert_hard_case(
     correct_label: str,
     user_id: int,
     item_id: int = None,
-    model_version: str = None
-):
+    model_version: str = None,
+    confidence: float = 0.0
+) -> int:
     """
     插入错误数据到 hard_cases 表
+    
+    支持幂等性：如果相同 image_url + wrong_label + correct_label 已存在，更新而非插入
     
     Args:
         image_url: 错误图片URL
@@ -243,33 +287,226 @@ async def insert_hard_case(
         user_id: 用户ID
         item_id: 商品ID（可选）
         model_version: 模型版本（可选）
+        confidence: 置信度（可选）
+        
+    Returns:
+        int: 记录ID
     """
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
+            # 检查是否已存在（幂等性）
+            await cur.execute(
+                """SELECT id, retry_count FROM hard_cases 
+                   WHERE image_url = %s AND wrong_label = %s AND correct_label = %s""",
+                (image_url, wrong_label, correct_label)
+            )
+            existing = await cur.fetchone()
+            
+            if existing:
+                # 更新已有记录（增加重试计数）
+                await cur.execute(
+                    """UPDATE hard_cases 
+                       SET retry_count = retry_count + 1,
+                           updated_at = NOW()
+                       WHERE id = %s""",
+                    (existing[0],)
+                )
+                return existing[0]
+            
+            # 插入新记录
             await cur.execute(
                 """INSERT INTO hard_cases 
-                   (image_url, wrong_label, correct_label, user_id, item_id, model_version)
-                   VALUES (%s, %s, %s, %s, %s, %s)""",
-                (image_url, wrong_label, correct_label, user_id, item_id, model_version)
+                   (image_url, wrong_label, correct_label, user_id, item_id, model_version, confidence, created_at) 
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())""",
+                (image_url, wrong_label, correct_label, user_id, item_id, model_version, confidence)
             )
+            return cur.lastrowid
 
 
-async def get_hard_cases(limit: int = 100) -> list[dict]:
-    """获取错误数据列表（用于训练）"""
+async def get_hard_cases(
+    limit: int = 100,
+    offset: int = 0,
+    is_fixed: bool = False,
+    sort_by: str = "created_at"
+) -> list[dict]:
+    """
+    获取错误数据列表（用于训练）
+    
+    Args:
+        limit: 返回数量
+        offset: 偏移量
+        is_fixed: 是否已修复
+        sort_by: 排序字段 (created_at, retry_count, confidence)
+    
+    Returns:
+        list: 错误数据列表
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            # 验证排序字段
+            valid_sort_fields = {"created_at", "retry_count", "confidence", "id"}
+            if sort_by not in valid_sort_fields:
+                sort_by = "created_at"
+            
+            await cur.execute(
+                f"""SELECT id, image_url, wrong_label, correct_label, user_id, 
+                          item_id, model_version, confidence, retry_count, is_fixed, 
+                          created_at, updated_at, fixed_at
+                   FROM hard_cases 
+                   WHERE is_fixed = %s
+                   ORDER BY {sort_by} DESC
+                   LIMIT %s OFFSET %s""",
+                (1 if is_fixed else 0, limit, offset)
+            )
+            return await cur.fetchall()
+
+
+async def get_hard_cases_by_item(item_id: int) -> list[dict]:
+    """
+    获取指定商品的所有错误数据
+    
+    Args:
+        item_id: 商品ID
+    
+    Returns:
+        list: 错误数据列表
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
                 """SELECT id, image_url, wrong_label, correct_label, user_id, 
-                          item_id, model_version, is_fixed, created_at
+                          model_version, confidence, retry_count, is_fixed, created_at
                    FROM hard_cases 
-                   WHERE is_fixed = 0
-                   ORDER BY created_at DESC
-                   LIMIT %s""",
-                (limit,)
+                   WHERE item_id = %s
+                   ORDER BY created_at DESC""",
+                (item_id,)
             )
             return await cur.fetchall()
+
+
+async def mark_hard_case_fixed(case_id: int) -> bool:
+    """
+    标记错误数据已修复（用于训练完成后）
+    
+    Args:
+        case_id: 错误数据ID
+    
+    Returns:
+        bool: 是否成功
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            result = await cur.execute(
+                "UPDATE hard_cases SET is_fixed = 1, fixed_at = NOW() WHERE id = %s",
+                (case_id,)
+            )
+            return result > 0
+
+
+async def mark_hard_cases_fixed(case_ids: list[int]) -> int:
+    """
+    批量标记错误数据已修复
+    
+    Args:
+        case_ids: 错误数据ID列表
+    
+    Returns:
+        int: 更新的记录数
+    """
+    if not case_ids:
+        return 0
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            placeholders = ','.join(['%s'] * len(case_ids))
+            result = await cur.execute(
+                f"UPDATE hard_cases SET is_fixed = 1, fixed_at = NOW() WHERE id IN ({placeholders})",
+                case_ids
+            )
+            return result
+
+
+async def delete_hard_case(case_id: int) -> bool:
+    """
+    删除错误数据
+    
+    Args:
+        case_id: 错误数据ID
+    
+    Returns:
+        bool: 是否成功
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            result = await cur.execute(
+                "DELETE FROM hard_cases WHERE id = %s",
+                (case_id,)
+            )
+            return result > 0
+
+
+async def get_hard_cases_stats() -> dict:
+    """
+    获取错误数据统计信息
+    
+    Returns:
+        dict: 统计数据
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            # 总数
+            await cur.execute("SELECT COUNT(*) as total FROM hard_cases")
+            total = await cur.fetchone()
+            
+            # 未修复数
+            await cur.execute("SELECT COUNT(*) as unfixed FROM hard_cases WHERE is_fixed = 0")
+            unfixed = await cur.fetchone()
+            
+            # 按错误类型分组
+            await cur.execute(
+                """SELECT wrong_label, COUNT(*) as count 
+                   FROM hard_cases 
+                   GROUP BY wrong_label 
+                   ORDER BY count DESC 
+                   LIMIT 20"""
+            )
+            by_wrong = await cur.fetchall()
+            
+            # 按正确类型分组
+            await cur.execute(
+                """SELECT correct_label, COUNT(*) as count 
+                   FROM hard_cases 
+                   GROUP BY correct_label 
+                   ORDER BY count DESC 
+                   LIMIT 20"""
+            )
+            by_correct = await cur.fetchall()
+            
+            # 按模型版本分组
+            await cur.execute(
+                """SELECT model_version, COUNT(*) as count 
+                   FROM hard_cases 
+                   WHERE model_version IS NOT NULL
+                   GROUP BY model_version 
+                   ORDER BY count DESC"""
+            )
+            by_version = await cur.fetchall()
+            
+            return {
+                'total': total['total'] if total else 0,
+                'unfixed': unfixed['unfixed'] if unfixed else 0,
+                'fixed': (total['total'] if total else 0) - (unfixed['unfixed'] if unfixed else 0),
+                'by_wrong_label': by_wrong,
+                'by_correct_label': by_correct,
+                'by_model_version': by_version
+            }
 
 
 # ============================================================
@@ -296,3 +533,42 @@ async def insert_audit_log(
                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (user_id, action_type, model_name, input_summary, raw_json, execution_time_ms, status, error_message),
             )
+
+
+async def get_audit_logs(
+    user_id: int = None,
+    action_type: str = None,
+    limit: int = 100,
+    offset: int = 0
+) -> list[dict]:
+    """
+    获取审计日志
+    
+    Args:
+        user_id: 用户ID（可选）
+        action_type: 操作类型（可选）
+        limit: 返回数量
+        offset: 偏移量
+    
+    Returns:
+        list: 审计日志列表
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            sql = "SELECT * FROM ai_audit_logs WHERE 1=1"
+            params = []
+            
+            if user_id:
+                sql += " AND user_id = %s"
+                params.append(user_id)
+            
+            if action_type:
+                sql += " AND action_type = %s"
+                params.append(action_type)
+            
+            sql += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+            
+            await cur.execute(sql, params)
+            return await cur.fetchall()

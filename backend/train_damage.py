@@ -16,12 +16,43 @@ python train_damage.py --phase finetune --data dataset/custom.yaml --pretrained 
 --epochs: 训练轮数（默认100）
 --batch: 批次大小（默认8）
 --imgsz: 输入图片尺寸（默认1024）
+--device: 设备 (cuda/cpu/auto)，默认自动检测
 
 注意: 建议在高性能电脑（GPU: RTX 4060 或更高）上运行训练
 """
 import os
+import sys
 import argparse
+import shutil
+import torch
+from pathlib import Path
 from ultralytics import YOLO
+
+
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+
+def get_device():
+    """
+    自动检测可用设备
+    
+    Returns:
+        str: 'cuda:0' 或 'mps' 或 'cpu'
+    """
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        print(f"✅ 使用 GPU: {torch.cuda.get_device_name(0)}")
+        return device
+    
+    # 检查是否有 MPS (Apple Silicon)
+    if hasattr(torch, 'mps') and torch.mps.is_available():
+        device = "mps"
+        print("✅ 使用 Apple Silicon MPS")
+        return device
+    
+    print("⚠️ 未检测到 GPU，使用 CPU（训练速度较慢）")
+    return "cpu"
 
 
 def parse_args():
@@ -34,15 +65,24 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=100, help="训练轮数")
     parser.add_argument("--batch", type=int, default=8, help="批次大小")
     parser.add_argument("--imgsz", type=int, default=1024, help="输入图片尺寸")
+    parser.add_argument("--device", type=str, default=None,
+                        help="设备 (cuda/cpu/auto)，默认自动检测")
     parser.add_argument("--model", type=str, default="yolov8n-seg.pt",
                         help="基础模型: yolov8n-seg, yolov8s-seg, yolov8m-seg, yolov8l-seg, yolov8x-seg")
     return parser.parse_args()
 
 
-def train_pretrain(data_yaml, epochs, batch, imgsz, model_size):
+def train_pretrain(data_yaml, epochs, batch, imgsz, model_size, device):
     """阶段1: 使用公开数据集预训练"""
     print("=" * 60)
     print("阶段1: 预训练模式")
+    print("=" * 60)
+    print(f"  数据集: {data_yaml}")
+    print(f"  模型: {model_size}")
+    print(f"  设备: {device}")
+    print(f"  轮数: {epochs}")
+    print(f"  批次: {batch}")
+    print(f"  图片尺寸: {imgsz}")
     print("=" * 60)
     
     model = YOLO(model_size)
@@ -55,7 +95,7 @@ def train_pretrain(data_yaml, epochs, batch, imgsz, model_size):
         patience=20,
         save=True,
         save_period=10,
-        device=0,
+        device=device,  # ✅ 使用自动检测的设备
         
         # 数据增强
         hsv_h=0.015,
@@ -81,19 +121,25 @@ def train_pretrain(data_yaml, epochs, batch, imgsz, model_size):
     )
     
     best_model = "runs/pretrain/damage_pretrain/weights/best.pt"
-    print(f"\n预训练完成！最佳模型: {best_model}")
+    print(f"\n✅ 预训练完成！最佳模型: {best_model}")
     return best_model
 
 
-def train_finetune(data_yaml, pretrained_model, epochs, batch, imgsz):
+def train_finetune(data_yaml, pretrained_model, epochs, batch, imgsz, device):
     """阶段2: 使用自定义数据集微调"""
     print("=" * 60)
     print("阶段2: 微调模式")
-    print(f"加载预训练模型: {pretrained_model}")
+    print("=" * 60)
+    print(f"  数据集: {data_yaml}")
+    print(f"  预训练模型: {pretrained_model}")
+    print(f"  设备: {device}")
+    print(f"  轮数: {epochs}")
+    print(f"  批次: {batch}")
+    print(f"  图片尺寸: {imgsz}")
     print("=" * 60)
     
     if not os.path.exists(pretrained_model):
-        raise ValueError(f"预训练模型不存在: {pretrained_model}")
+        raise ValueError(f"❌ 预训练模型不存在: {pretrained_model}")
     
     # 加载预训练模型
     model = YOLO(pretrained_model)
@@ -107,7 +153,7 @@ def train_finetune(data_yaml, pretrained_model, epochs, batch, imgsz):
         patience=15,
         save=True,
         save_period=5,
-        device=0,
+        device=device,  # ✅ 使用自动检测的设备
         
         # 微调时数据增强可以稍微保守一些
         hsv_h=0.01,
@@ -133,12 +179,20 @@ def train_finetune(data_yaml, pretrained_model, epochs, batch, imgsz):
     )
     
     best_model = "runs/finetune/damage_finetune/weights/best.pt"
-    print(f"\n微调完成！最佳模型: {best_model}")
+    print(f"\n✅ 微调完成！最佳模型: {best_model}")
     return best_model
 
 
 def main():
     args = parse_args()
+    
+    # ✅ 自动检测设备
+    device = args.device if args.device else get_device()
+    
+    # 检查数据集文件是否存在
+    if not os.path.exists(args.data):
+        print(f"❌ 数据集配置文件不存在: {args.data}")
+        return
     
     if args.phase == "pretrain":
         train_pretrain(
@@ -146,25 +200,36 @@ def main():
             epochs=args.epochs,
             batch=args.batch,
             imgsz=args.imgsz,
-            model_size=args.model
+            model_size=args.model,
+            device=device
         )
+        
     elif args.phase == "finetune":
         if not args.pretrained:
-            raise ValueError("微调阶段必须指定 --pretrained 参数")
+            raise ValueError("❌ 微调阶段必须指定 --pretrained 参数")
         
         best_model = train_finetune(
             data_yaml=args.data,
             pretrained_model=args.pretrained,
             epochs=args.epochs,
             batch=args.batch,
-            imgsz=args.imgsz
+            imgsz=args.imgsz,
+            device=device
         )
         
         # 复制最终模型到部署位置
-        os.makedirs("models", exist_ok=True)
-        import shutil
-        shutil.copy(best_model, "models/damage_seg.pt")
-        print(f"\n✅ 已复制最终模型到: models/damage_seg.pt")
+        target_dir = Path(__file__).parent.parent / "app" / "ml" / "models"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+        target_path = target_dir / "defect_best.pt"
+        shutil.copy(best_model, target_path)
+        
+        print("=" * 60)
+        print("✅ 训练完成！")
+        print("=" * 60)
+        print(f"  最佳模型: {best_model}")
+        print(f"  已复制到: {target_path}")
+        print("=" * 60)
 
 
 if __name__ == "__main__":

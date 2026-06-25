@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import logging
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

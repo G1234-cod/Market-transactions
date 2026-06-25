@@ -1,5 +1,6 @@
 """Pydantic 数据模型 —— 统一请求/响应/内部 DTO"""
 from pydantic import BaseModel, Field
+from typing import Optional, List, Any
 
 
 # ============================================================
@@ -34,9 +35,9 @@ class ExtractResult(BaseModel):
 
 class ExtractResponse(BaseModel):
     success: bool
-    data: ExtractResult | None = None
-    image_urls: list[str] = []
-    error: str | None = None
+    data: Optional[ExtractResult] = None
+    image_urls: List[str] = []
+    error: Optional[str] = None
 
 
 # ============================================================
@@ -64,10 +65,10 @@ class GenerateRequest(BaseModel):
     brand: str
     model: str
     condition: str
-    image_urls: list[str] = []
-    avg_price: float | None = None
-    low_price: float | None = None
-    high_price: float | None = None
+    image_urls: List[str] = []
+    avg_price: Optional[float] = None
+    low_price: Optional[float] = None
+    high_price: Optional[float] = None
 
 
 class GenerateSaveRequest(BaseModel):
@@ -77,6 +78,10 @@ class GenerateSaveRequest(BaseModel):
     desc: str
     price: float
     status: str = "published"
+    category: Optional[str] = None      # ✅ 改为 Optional
+    brand: Optional[str] = None         # ✅ 新增
+    model: Optional[str] = None         # ✅ 新增
+    condition: Optional[str] = None     # ✅ 新增
 
 
 # ============================================================
@@ -88,10 +93,14 @@ class HistoryItem(BaseModel):
     user_id: int
     original_image_url: str
     ai_generated_title: str
-    ai_generated_desc: str | None
-    suggested_price: float | None
+    ai_generated_desc: Optional[str] = None
+    suggested_price: Optional[float] = None
     status: str
     created_at: str
+    views: int = 0
+    likes: int = 0
+    category: Optional[str] = None
+    item_condition: str = "unknown"
 
 
 # ============================================================
@@ -100,12 +109,37 @@ class HistoryItem(BaseModel):
 
 class MarketItem(BaseModel):
     id: int
+    user_id: int
     username: str
     original_image_url: str
     ai_generated_title: str
-    ai_generated_desc: str | None
-    suggested_price: float | None
+    ai_generated_desc: Optional[str] = None
+    suggested_price: Optional[float] = None
+    category: Optional[str] = None
+    item_condition: str = "unknown"
+    views: int = 0
+    likes: int = 0
     created_at: str
+    is_liked: bool = False
+
+
+# ============================================================
+# 以图搜图
+# ============================================================
+
+class SearchResult(BaseModel):
+    id: int
+    title: str
+    price: Optional[float] = None
+    image_url: str
+    similarity: float
+    category: Optional[str] = None
+
+
+class SearchResponse(BaseModel):
+    success: bool
+    results: List[SearchResult] = []
+    count: int = 0
 
 
 # ============================================================
@@ -124,7 +158,7 @@ DAMAGE_COLORS = {
     DamageType.SCRATCH: (255, 0, 0),      # 红色
     DamageType.DENT: (0, 0, 255),         # 蓝色
     DamageType.CRACK: (255, 255, 0),      # 黄色
-    DamageType.STAIN: (0, 255, 0),         # 绿色
+    DamageType.STAIN: (0, 255, 0),        # 绿色
     DamageType.OTHER: (255, 165, 0),      # 橙色
 }
 
@@ -133,23 +167,22 @@ class DamageRegion(BaseModel):
     """损伤区域"""
     damage_type: str           # 损伤类型：scratch/dent/crack/stain/other
     confidence: float          # 置信度 0-1
-    # 多边形顶点坐标（相对于原图）
-    polygon: list[list[float]]  # [[x1,y1], [x2,y2], [x3,y3], ...]
+    polygon: List[List[float]]  # 多边形顶点坐标 [[x1,y1], [x2,y2], ...]
 
 
 class DamageDetectionResult(BaseModel):
     """单张图片的损伤检测结果"""
     image_url: str             # 原图URL
     annotated_image_url: str   # 标注后的图片URL
-    regions: list[DamageRegion]  # 检测到的损伤区域列表
+    regions: List[DamageRegion]  # 检测到的损伤区域列表
     total_regions: int        # 总损伤区域数
 
 
 class DamageDetectionResponse(BaseModel):
     """损伤检测响应"""
     success: bool
-    data: list[DamageDetectionResult] | None = None
-    error: str | None = None
+    data: Optional[List[DamageDetectionResult]] = None
+    error: Optional[str] = None
 
 
 class DamageDetectionRecord(BaseModel):
@@ -157,6 +190,69 @@ class DamageDetectionRecord(BaseModel):
     id: int
     published_item_id: int     # 关联的发布记录ID
     original_image_url: str
-    annotated_image_url: str    # 标注图URL
+    annotated_image_url: str   # 标注图URL
     regions_json: str          # 损伤区域JSON存储
     created_at: str
+
+
+# ============================================================
+# 瑕疵检测（新版）
+# ============================================================
+
+class DefectInfo(BaseModel):
+    """瑕疵信息（前端展示，不含程度）"""
+    type: str                  # scratch/dent/stain/crack/peeling
+    type_cn: str               # 划痕/磕碰/污渍/裂痕/掉漆
+    bbox: List[int]            # [x1, y1, x2, y2]
+    confidence: float          # 置信度
+
+
+class DefectInfoDS(BaseModel):
+    """瑕疵信息（DeepSeek 定价用，含程度）"""
+    type: str
+    type_cn: str
+    bbox: List[int]
+    area: int
+    area_ratio: float
+    confidence: float
+    severity: str              # severe/moderate/minor/slight
+    severity_label: str        # 重度/中度/轻度/轻微
+
+
+class ProcessImageResponse(BaseModel):
+    """全链路图片处理响应"""
+    success: bool
+    data: dict
+    saved_files: dict
+    preprocess_info: dict
+    message: str
+    deepseek_data: Optional[dict] = None
+    price_suggestion: Optional[dict] = None
+
+
+# ============================================================
+# 分页
+# ============================================================
+
+class PaginationParams(BaseModel):
+    page: int = Field(default=1, ge=1, description="页码")
+    page_size: int = Field(default=20, ge=1, le=100, description="每页数量")
+
+
+class PaginatedResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    items: List[Any] = []
+
+
+# ============================================================
+# 通用响应
+# ============================================================
+
+class BaseResponse(BaseModel):
+    success: bool
+    message: str = ""
+    error: Optional[str] = None
+    timestamp: str = ""
