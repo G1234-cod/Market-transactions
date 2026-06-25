@@ -24,7 +24,16 @@ DATASET_PATH = './datasets/defect_dataset'
 EPOCHS_PER_RUN = 8                     # 🔑 每次训练 8 轮（约 2-3 小时）
 IMGSZ = 640
 BATCH = 16
-DEVICE = 0
+
+# 🔑 自动检测设备（GPU或CPU）
+if torch.cuda.is_available():
+    DEVICE = 0                         # GPU编号（0=第一张显卡）
+    print(f"✅ GPU可用: {torch.cuda.get_device_name(0)}")
+    print(f"   显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+else:
+    DEVICE = 'cpu'                     # 使用CPU
+    print("⚠️ 未检测到GPU，将使用CPU训练（速度会很慢）")
+
 PATIENCE = 10
 PROJECT = 'runs/train_defect'
 NAME = 'defect_detector'
@@ -98,6 +107,9 @@ def check_gpu():
     if torch.cuda.is_available():
         print(f"  GPU 名称: {torch.cuda.get_device_name(0)}")
         print(f"  GPU 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        print(f"  使用设备: GPU 0")
+    else:
+        print(f"  使用设备: CPU")
     print("="*70 + "\n")
 
 
@@ -257,6 +269,7 @@ def train():
     print(f"   本轮训练: {EPOCHS_PER_RUN} 轮")
     print(f"   批次大小: {BATCH}")
     print(f"   图片尺寸: {IMGSZ}")
+    print(f"   设备: {'GPU 0' if DEVICE == 0 else 'CPU'}")
     print(f"   自动调参: ✅ 已开启")
     print(f"{'─'*70}\n")
     
@@ -270,7 +283,7 @@ def train():
         save_period=1,
         project=PROJECT,
         name=NAME,
-        device=DEVICE,
+        device=DEVICE,                  # 🔑 自动选择的设备
         workers=4,
         verbose=True,
         augment=True,

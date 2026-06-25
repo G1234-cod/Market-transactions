@@ -14,7 +14,7 @@ from app.utils.image_utils import pil_to_base64, save_image
 from app.llm.deepseek_price_client import DeepSeekPriceClient
 from app.config import settings
 from app.db import crud
-from app.utils.preprocess import get_preprocessor  # 🆕 新增
+from app.utils.preprocess import get_preprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ async def process_image(
         pil_image = Image.open(io.BytesIO(content))
 
         # ============================================================
-        # 🆕 1. 图片预处理
+        # 1. 图片预处理
         # ============================================================
         preprocessor = get_preprocessor(target_size=448)
         preprocess_result = preprocessor.process(pil_image)
@@ -74,14 +74,29 @@ async def process_image(
         detector = get_detector()
         result = detector.process(processed_image)
 
+        # 日志：检查 result 内容
+        logger.info(f"📊 result keys: {result.keys()}")
+        logger.info(f"📊 defect_count: {result.get('defect_count', 0)}")
+        logger.info(f"📊 annotated type: {type(result.get('annotated'))}")
+
+        # ============================================================
+        # 3. 保存标注图
+        # ============================================================
         uid = uuid.uuid4().hex
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"{timestamp}_{uid}"
         annotated_path = f"static/uploads/annotated/{base_name}.png"
-        save_image(result['annotated'], annotated_path)
+        
+        logger.info(f"📝 准备保存标注图: {annotated_path}")
+        
+        if result.get('annotated') is not None:
+            save_image(result['annotated'], annotated_path)
+            logger.info(f"✅ 标注图已保存: {annotated_path}")
+        else:
+            logger.warning("⚠️ result['annotated'] 为 None，无法保存标注图")
 
         # ============================================================
-        # 3. 保存瑕疵数据到数据库
+        # 4. 保存瑕疵数据到数据库
         # ============================================================
         if item_id:
             try:
@@ -96,7 +111,7 @@ async def process_image(
                 logger.error(f"保存瑕疵数据到数据库失败: {e}")
 
         # ============================================================
-        # 4. DeepSeek 定价
+        # 5. DeepSeek 定价
         # ============================================================
         deepseek_data = None
         price_suggestion = None
@@ -129,17 +144,17 @@ async def process_image(
                 }
 
         # ============================================================
-        # 5. 构建返回数据
+        # 6. 构建返回数据
         # ============================================================
         response_data = {
             'success': True,
             'data': {
-                'annotated_base64': pil_to_base64(result['annotated']),
+                'annotated_base64': pil_to_base64(result['annotated']) if result.get('annotated') else None,
                 'defects': result['defects'],
                 'defect_count': result['defect_count']
             },
             'saved_files': {
-                'annotated': annotated_path
+                'annotated': annotated_path if result.get('annotated') else None
             },
             'preprocess_info': {
                 'success': preprocess_result['success'],
