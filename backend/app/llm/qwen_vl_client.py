@@ -57,7 +57,9 @@ class QwenVLClient(BaseLLMClient):
             messages=messages,
             **kwargs,
         )
-        return resp.choices[0].message.content or ""
+        if resp.choices:
+            return resp.choices[0].message.content or ""
+        return ""
 
     async def chat_stream(self, messages: list[dict], **kwargs) -> AsyncIterator[str]:
         """流式调用 Qwen-VL-Max，逐 token 返回"""
@@ -69,6 +71,8 @@ class QwenVLClient(BaseLLMClient):
             **kwargs,
         )
         async for chunk in stream:
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta
             if delta and delta.content:
                 yield delta.content

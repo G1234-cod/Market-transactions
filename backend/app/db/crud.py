@@ -77,6 +77,10 @@ async def authenticate_user(username: str, password: str) -> tuple[bool, int | N
                 return False, None, "用户不存在"
             if not _verify_password(password, row["password_hash"]):
                 return False, None, "密码错误"
+            await cur.execute(
+                "UPDATE users SET last_login = NOW() WHERE id = %s",
+                (row["id"],)
+            )
             return True, row["id"], "登录成功"
 
 

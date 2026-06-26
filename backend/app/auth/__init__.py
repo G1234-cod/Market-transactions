@@ -6,7 +6,7 @@ from app.auth.jwt_handler import (
     decode_access_token,
     get_user_id_from_token,
     verify_password,
-    get_password_hash,
+    hash_password,
 )
 
 __all__ = [
@@ -14,5 +14,5 @@ __all__ = [
     'decode_access_token',
     'get_user_id_from_token',
     'verify_password',
-    'get_password_hash',
+    'hash_password',
 ]

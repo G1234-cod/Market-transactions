@@ -31,6 +31,8 @@ class DeepSeekClient(BaseLLMClient):
             **kwargs,
         )
         async for chunk in stream:
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta
             if delta and delta.content:
                 yield delta.content

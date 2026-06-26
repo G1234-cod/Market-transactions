@@ -1,4 +1,5 @@
 """Pydantic 数据模型 —— 统一请求/响应/内部 DTO"""
+from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any
 
@@ -175,7 +176,7 @@ class SearchResponse(BaseModel):
 # 损伤检测
 # ============================================================
 
-class DamageType(str):
+class DamageType(str, Enum):
     SCRATCH = "scratch"       # 划痕 - 红色
     DENT = "dent"             # 凹陷 - 蓝色
     CRACK = "crack"           # 裂纹 - 黄色

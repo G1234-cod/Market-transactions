@@ -44,27 +44,26 @@ class DefectDetector:
     }
     
     # ==================== 程度等级配置 ====================
-    # 不同形状 + 不同颜色 = 不同程度
     SEVERITY_CONFIG = {
-        'severe': {      # 重度 - 圆形 + 红色
+        'severe': {
             'shape': 'circle',
             'color': '#FF0000',
             'label': '重度',
             'rgb_color': (255, 0, 0)
         },
-        'moderate': {    # 中度 - 矩形 + 橙色
+        'moderate': {
             'shape': 'rectangle',
             'color': '#FF8C00',
             'label': '中度',
             'rgb_color': (255, 140, 0)
         },
-        'minor': {       # 轻度 - 多边形 + 黄色
+        'minor': {
             'shape': 'polygon',
             'color': '#FFD700',
             'label': '轻度',
             'rgb_color': (255, 215, 0)
         },
-        'slight': {      # 轻微 - 虚线框 + 蓝色
+        'slight': {
             'shape': 'dashed_box',
             'color': '#00BFFF',
             'label': '轻微',
@@ -72,7 +71,6 @@ class DefectDetector:
         }
     }
     
-    # 程度显示顺序
     SEVERITY_ORDER = ['severe', 'moderate', 'minor', 'slight']
 
     def __init__(
@@ -89,16 +87,16 @@ class DefectDetector:
             conf_threshold: 置信度阈值
             device: 运行设备 (cpu/cuda/auto)
         """
-        # 设备选择
         if device == "auto":
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         else:
             self.device = device
         
         self.conf_threshold = conf_threshold
-        self.model_path = None  # 记录实际加载的模型路径
+        self.model_path = None
+        self._load_failed = False
         
-        # 加载模型（多级回退）
+        # ✅ 加载模型（不降级到通用模型）
         self.model = self._load_model(model_path)
         
         if self.model is not None:
@@ -108,17 +106,21 @@ class DefectDetector:
             logger.info(f"   类别数: {len(self.DEFECT_CLASSES)}")
             logger.info(f"   类别: {list(self.DEFECT_CLASSES.values())}")
         else:
-            logger.warning("⚠️ 瑕疵检测器未加载，请检查模型文件")
+            logger.error("❌ 瑕疵检测器未加载！")
+            logger.error("   请确保以下路径存在:")
+            logger.error(f"   - 配置路径: {settings.DEFECT_MODEL_PATH}")
+            logger.error(f"   - 默认路径: {Path(__file__).parent / 'models' / 'defect_best.pt'}")
+            self._load_failed = True
     
     def _load_model(self, model_path: Optional[str] = None) -> Optional[YOLO]:
         """
-        加载 YOLO 模型（多级回退）
+        加载 YOLO 模型（仅尝试瑕疵检测模型，不降级到通用模型）
         
         优先级：
         1. 传入的 model_path 参数
         2. settings.DEFECT_MODEL_PATH（配置文件）
         3. 默认路径 app/ml/models/defect_best.pt
-        4. 尝试使用通用模型作为回退
+        4. 所有路径都失败 → 返回 None（不加载通用模型）
         """
         # 1. 优先使用传入的路径
         if model_path and Path(model_path).exists():
@@ -140,20 +142,13 @@ class DefectDetector:
             self.model_path = str(default_path)
             return YOLO(str(default_path))
         
-        # 4. 尝试使用通用模型作为回退
-        yolo_path = Path(settings.YOLO_MODEL_PATH)
-        if yolo_path.exists():
-            logger.warning(f"⚠️ 未找到瑕疵检测模型，使用通用模型作为回退: {yolo_path}")
-            self.model_path = str(yolo_path)
-            return YOLO(str(yolo_path))
-        
-        # 5. 所有路径都失败
-        logger.error("❌ 未找到任何可用模型")
+        # 4. ✅ 所有路径都失败 → 返回 None，不加载通用模型
+        logger.error("❌ 未找到瑕疵检测模型")
         logger.error(f"   尝试过的路径:")
         logger.error(f"   - 传入: {model_path}")
         logger.error(f"   - 配置: {settings.DEFECT_MODEL_PATH}")
         logger.error(f"   - 默认: {Path(__file__).parent / 'models' / 'defect_best.pt'}")
-        logger.error(f"   - 回退: {settings.YOLO_MODEL_PATH}")
+        logger.error("   ⚠️ 不会降级到通用 YOLO 模型（COCO 模型无法检测瑕疵）")
         self.model_path = None
         return None
     
@@ -162,7 +157,7 @@ class DefectDetector:
         defect_type: str,
         area_ratio: float,
         confidence: float,
-        bbox: List[float]  # ✅ 统一使用 float
+        bbox: List[float]
     ) -> str:
         """
         根据瑕疵类型、面积占比、置信度判断程度等级
@@ -191,7 +186,6 @@ class DefectDetector:
             width = bbox[2] - bbox[0]
             height = bbox[3] - bbox[1]
             aspect_ratio = max(width, height) / (min(width, height) + 1)
-            # 长条形划痕（细长）视为更严重
             if aspect_ratio > 5 and area_ratio > 0.0005:
                 return 'moderate'
             if area_ratio > 0.0005:
@@ -210,7 +204,6 @@ class DefectDetector:
                 return 'moderate'
             return 'minor'
         
-        # 默认：轻度
         return 'minor'
     
     def _draw_shape(
@@ -224,18 +217,8 @@ class DefectDetector:
         color: str,
         width: int = 3
     ):
-        """
-        根据形状类型画不同的标注框
-        
-        Args:
-            draw: ImageDraw 对象
-            x1, y1, x2, y2: 边界框坐标 (int)
-            shape: circle / rectangle / polygon / dashed_box
-            color: 颜色
-            width: 边框宽度
-        """
+        """根据形状类型画不同的标注框"""
         if shape == 'circle':
-            # 圆形
             center_x = (x1 + x2) // 2
             center_y = (y1 + y2) // 2
             radius = max((x2 - x1), (y2 - y1)) // 2
@@ -247,23 +230,17 @@ class DefectDetector:
             )
             
         elif shape == 'dashed_box':
-            # 虚线框
             step = 10
-            # 上边
             for i in range(0, (x2 - x1), step * 2):
                 draw.line([(x1 + i, y1), (x1 + min(i + step, x2 - x1), y1)], fill=color, width=width)
-            # 下边
             for i in range(0, (x2 - x1), step * 2):
                 draw.line([(x1 + i, y2), (x1 + min(i + step, x2 - x1), y2)], fill=color, width=width)
-            # 左边
             for i in range(0, (y2 - y1), step * 2):
                 draw.line([(x1, y1 + i), (x1, y1 + min(i + step, y2 - y1))], fill=color, width=width)
-            # 右边
             for i in range(0, (y2 - y1), step * 2):
                 draw.line([(x2, y1 + i), (x2, y1 + min(i + step, y2 - y1))], fill=color, width=width)
                 
         elif shape == 'polygon':
-            # 多边形（六边形）
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
             w = (x2 - x1) // 2
@@ -279,7 +256,6 @@ class DefectDetector:
             draw.polygon(points, outline=color, width=width)
             
         else:
-            # 默认矩形
             draw.rectangle([(x1, y1), (x2, y2)], outline=color, width=width)
     
     def detect_defects(
@@ -288,16 +264,14 @@ class DefectDetector:
         conf_threshold: Optional[float] = None
     ) -> List[Dict[str, Any]]:
         """
-        检测瑕疵（YOLO 推理）
+        检测瑕疵
         
-        Args:
-            image: PIL Image 对象
-            conf_threshold: 置信度阈值（覆盖默认值）
-            
         Returns:
-            瑕疵列表，每个瑕疵包含类型、置信度、边界框、程度等级等
+            瑕疵列表，如果没有模型则返回空列表
         """
-        if self.model is None:
+        # ✅ 如果没有模型，返回空列表
+        if self.model is None or self._load_failed:
+            logger.warning("⚠️ 瑕疵检测模型未加载，返回空结果")
             return []
         
         conf = conf_threshold if conf_threshold is not None else self.conf_threshold
@@ -311,25 +285,25 @@ class DefectDetector:
                     conf = float(box.conf[0])
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                     
-                    # ✅ 从 DEFECT_CLASSES 获取类别名称（确保一致性）
+                    # ✅ 如果模型输出的类别不在 DEFECT_CLASSES 中，跳过（防止 COCO 类别污染）
+                    if cls_id not in self.DEFECT_CLASSES:
+                        logger.warning(f"⚠️ 跳过非瑕疵类别: {cls_id} (模型可能不是瑕疵检测模型)")
+                        continue
+                    
                     class_name = self.DEFECT_CLASSES.get(cls_id, 'other')
                     class_cn = self.DEFECT_NAMES_CN.get(class_name, '其他')
                     
-                    # ✅ 使用 float 类型（与 yolo_detector.py 一致）
                     bbox = [float(x1), float(y1), float(x2), float(y2)]
-                    
-                    # 计算面积占比
                     area = (x2 - x1) * (y2 - y1)
                     area_ratio = area / (image.width * image.height)
                     
-                    # 判断程度等级
                     severity = self._determine_severity(class_name, area_ratio, conf, bbox)
                     
                     defects.append({
                         'type': class_name,
                         'type_cn': class_cn,
                         'confidence': round(conf, 3),
-                        'bbox': bbox,  # ✅ float 类型
+                        'bbox': bbox,
                         'area': int(area),
                         'area_ratio': round(area_ratio, 4),
                         'severity': severity,
@@ -348,25 +322,12 @@ class DefectDetector:
         defects: List[Dict[str, Any]],
         show_severity: bool = False
     ) -> Image.Image:
-        """
-        在图片上画标注框
-        ⚠️ 不同形状 + 不同颜色 = 不同程度
-        默认程度标签不显示给用户，只显示瑕疵类型
-        
-        Args:
-            image: PIL Image 对象
-            defects: 瑕疵列表
-            show_severity: 是否显示程度标签（调试用，默认关闭）
-            
-        Returns:
-            标注后的 PIL Image
-        """
+        """在图片上画标注框"""
         img = image.copy()
         draw = ImageDraw.Draw(img)
         font = get_chinese_font(18)
         
         for defect in defects:
-            # ✅ 将 float 转为 int（PIL 需要 int 坐标）
             bbox = defect['bbox']
             x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
             
@@ -374,7 +335,6 @@ class DefectDetector:
             shape = defect['shape']
             severity = defect['severity']
             
-            # 根据程度调整线宽
             width_map = {
                 'severe': 4,
                 'moderate': 3,
@@ -383,31 +343,24 @@ class DefectDetector:
             }
             width = width_map.get(severity, 3)
             
-            # 画不同形状的框
             self._draw_shape(draw, x1, y1, x2, y2, shape, color, width)
             
-            # 标签：默认只显示类型名称
             if show_severity:
                 label = f"{defect['type_cn']}({defect['severity_label']})"
             else:
                 label = defect['type_cn']
             
-            # 文字背景和标签
             try:
-                # 获取文字大小
                 bbox = draw.textbbox((0, 0), label, font=font)
                 text_width = bbox[2] - bbox[0]
                 text_height = bbox[3] - bbox[1]
                 
-                # 画文字背景
                 draw.rectangle(
                     [(x1, y1 - text_height - 6), (x1 + text_width + 4, y1)],
                     fill=color
                 )
-                # 写文字
                 draw.text((x1 + 2, y1 - text_height - 4), label, fill='white', font=font)
             except Exception:
-                # 简化版
                 draw.text((x1, y1 - 12), label, fill=color)
         
         return img
@@ -417,36 +370,15 @@ class DefectDetector:
         image: Image.Image,
         conf_threshold: Optional[float] = None
     ) -> Dict[str, Any]:
-        """
-        完整处理流程
-        
-        Args:
-            image: PIL Image 对象
-            conf_threshold: 置信度阈值
-            
-        Returns:
-            dict: {
-                'bg_removed': 原图,
-                'annotated': 标注图,
-                'defects': 前端展示的瑕疵列表（不含程度）,
-                'defects_for_ds': 发给 DeepSeek 的瑕疵列表（含程度）,
-                'defect_count': 瑕疵总数,
-                'severity_summary': 程度统计
-            }
-        """
-        # 1. 瑕疵检测
+        """完整处理流程"""
         defects = self.detect_defects(image, conf_threshold)
-        
-        # 2. 画框标注
         annotated = self.draw_annotations(image, defects, show_severity=False)
         
-        # 3. 分离数据
         defects_for_frontend = []
         defects_for_ds = []
         severity_count = {'severe': 0, 'moderate': 0, 'minor': 0, 'slight': 0}
         
         for d in defects:
-            # 前端数据：不包含程度信息
             defects_for_frontend.append({
                 'type': d['type'],
                 'type_cn': d['type_cn'],
@@ -454,7 +386,6 @@ class DefectDetector:
                 'confidence': d['confidence']
             })
             
-            # DeepSeek 数据：包含程度信息
             defects_for_ds.append({
                 'type': d['type'],
                 'type_cn': d['type_cn'],
@@ -466,7 +397,6 @@ class DefectDetector:
                 'severity_label': d['severity_label']
             })
             
-            # 统计程度
             severity_count[d['severity']] = severity_count.get(d['severity'], 0) + 1
         
         return {
@@ -479,15 +409,7 @@ class DefectDetector:
         }
     
     def get_defects_for_deepseek(self, defects: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        生成发送给 DeepSeek 的结构化数据
-        
-        Args:
-            defects: 瑕疵列表（含程度信息）
-            
-        Returns:
-            dict: DeepSeek 定价请求数据
-        """
+        """生成发送给 DeepSeek 的结构化数据"""
         if not defects:
             return {
                 'has_defects': False,
@@ -497,12 +419,10 @@ class DefectDetector:
                 'total': 0
             }
         
-        # 统计各程度数量
         severity_count = {'severe': 0, 'moderate': 0, 'minor': 0, 'slight': 0}
         for d in defects:
             severity_count[d['severity']] = severity_count.get(d['severity'], 0) + 1
         
-        # 生成摘要
         has_severe = severity_count['severe'] > 0
         has_moderate = severity_count['moderate'] > 0
         has_minor = severity_count['minor'] > 0
@@ -519,7 +439,6 @@ class DefectDetector:
         else:
             summary = "商品外观完好，无瑕疵"
         
-        # 按程度排序（严重到轻微）
         sorted_defects = sorted(
             defects,
             key=lambda x: self.SEVERITY_ORDER.index(x['severity'])

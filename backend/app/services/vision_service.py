@@ -11,8 +11,8 @@ def _parse_json_from_text(text: str) -> dict:
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if m:
         text = m.group(1)
-    # 2. 从文本中找第一个 { 到最后 }
-    m = re.search(r"\{[\s\S]*\}", text)
+    # 2. 从文本中找第一个 JSON 对象
+    m = re.search(r"\{[\s\S]*?\}", text)
     if m:
         text = m.group(0)
     # 3. 解析
@@ -21,7 +21,10 @@ def _parse_json_from_text(text: str) -> dict:
 
 def parse_to_extract_result(raw_response: str) -> ExtractResult:
     """两层防护：json.loads + Pydantic 校验"""
-    data = _parse_json_from_text(raw_response)
+    try:
+        data = _parse_json_from_text(raw_response)
+    except (json.JSONDecodeError, AttributeError):
+        data = {}
     return ExtractResult(
         category=data.get("category", ""),
         brand=data.get("brand", ""),

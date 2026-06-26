@@ -89,9 +89,12 @@ async def save_history(
         condition=payload.condition,  # ✅ 使用 condition
     )
     
-    # 自动加入以图搜图索引
-    await add_to_search_index(item_id, payload)
-    
+    # 自动加入以图搜图索引（失败不影响保存结果）
+    try:
+        await add_to_search_index(item_id, payload)
+    except Exception as e:
+        logger.error(f"自动索引失败: {e}")
+
     return {"id": item_id, "status": "saved"}
 
 

@@ -118,6 +118,8 @@ async def extract(
         # 使用预处理后的图片生成 base64
         import io
         buf = io.BytesIO()
+        if processed_image.mode in ('RGBA', 'P'):
+            processed_image = processed_image.convert('RGB')
         processed_image.save(buf, format='JPEG', quality=85)
         processed_content = buf.getvalue()
         image_b64 = base64.b64encode(processed_content).decode()
@@ -198,17 +200,20 @@ async def extract(
         logger.error(f"双模型比对失败: {e}")
 
     # ============================================================
-    # 6. 审计日志
+    # 6. 审计日志（失败不影响返回结果）
     # ============================================================
-    await audit_service.log_vision_call(
-        user_id=user_id,
-        model_name=settings.QWEN_VL_MODEL,
-        input_summary=f"图片: {safe_filename} ({len(content)} bytes)",
-        raw_response=raw_response,
-        start_time=start_time,
-        success=success,
-        error_msg=error_msg,
-    )
+    try:
+        await audit_service.log_vision_call(
+            user_id=user_id,
+            model_name=settings.QWEN_VL_MODEL,
+            input_summary=f"图片: {safe_filename} ({len(content)} bytes)",
+            raw_response=raw_response,
+            start_time=start_time,
+            success=success,
+            error_msg=error_msg,
+        )
+    except Exception as e:
+        logger.error(f"审计日志记录失败（不影响响应）: {e}")
 
     # ============================================================
     # 7. 返回结果

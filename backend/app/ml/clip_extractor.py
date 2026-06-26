@@ -42,7 +42,7 @@ class CLIPExtractor:
         self.model.eval()
         self.model.to(self.device)
         self.tokenizer = open_clip.get_tokenizer(self.model_name)
-        self.embed_dim = 512
+        self.embed_dim = self.model.visual.output_dim
         
         logger.info(f"✅ CLIP 加载完成")
         logger.info(f"   模型: {self.model_name}")

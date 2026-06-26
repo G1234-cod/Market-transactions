@@ -118,6 +118,13 @@ async def process_image(
         # ============================================================
         if item_id:
             try:
+                # 验证商品所有权
+                item = await crud.get_item_by_id(item_id)
+                if item is None:
+                    raise HTTPException(status_code=404, detail="商品不存在")
+                if item["user_id"] != user_id:
+                    raise HTTPException(status_code=403, detail="无权操作此商品")
+
                 await crud.update_item_defects(
                     item_id=item_id,
                     annotated_url=annotated_path,
@@ -135,7 +142,7 @@ async def process_image(
         
         try:
             # ✅ 查询市场行情（返回 PriceResult 对象）
-            price_result: PriceResult = await query_price(brand=brand, model=model)
+            price_result: PriceResult = await query_price(brand=brand, model_name=model)
             
             # ✅ 使用 . 属性访问（BaseModel 正确方式）
             if price_result and price_result.avg_price:

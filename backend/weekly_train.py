@@ -85,23 +85,14 @@ def get_class_id(class_name: str) -> int:
     if not class_name:
         return 0
     
-    # 中文到英文映射
+    # 中文到英文映射（仅瑕疵类型）
     cn_to_en = {
         '划痕': 'scratch',
         '磕碰': 'dent',
         '裂痕': 'crack',
         '污渍': 'stain',
+        '掉漆': 'scratch',
         '其他': 'other',
-        '手机': 'cell phone',
-        '笔记本': 'laptop',
-        '平板': 'tablet',
-        '耳机': 'headphone',
-        '鼠标': 'mouse',
-        '键盘': 'keyboard',
-        '相机': 'camera',
-        '手表': 'watch',
-        '游戏机': 'game console',
-        '掉漆': 'peeling',
     }
     
     # 1. 直接匹配缺陷类别
@@ -459,16 +450,7 @@ def run_training(data_yaml: Path, output_dir: Path) -> bool:
             
             shutil.copy(new_model, MODEL_PATH)
             logger.info(f"✅ 模型已更新: {MODEL_PATH}")
-            
-            # ✅ 标记错误数据为已修复（使用同步方式）
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                # 如果已经在事件循环中，创建任务
-                loop.create_task(mark_cases_fixed())
-            except RuntimeError:
-                # 没有运行中的事件循环，使用 asyncio.run()
-                asyncio.run(mark_cases_fixed())
+
             return True
         else:
             logger.error("❌ 训练失败，模型未生成")
@@ -520,6 +502,7 @@ async def main_async():
     
     if success:
         logger.info("✅ 每周训练完成！")
+        await mark_cases_fixed()
     else:
         logger.error("❌ 每周训练失败")
 

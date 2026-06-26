@@ -97,7 +97,7 @@ async def get_connection() -> AsyncGenerator[aiomysql.Connection, None]:
 async def health_check() -> bool:
     """
     检查数据库连接是否正常
-    
+
     Returns:
         bool: 连接正常返回 True
     """
@@ -105,8 +105,8 @@ async def health_check() -> bool:
         pool = await get_pool()
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT 1")
-                await cur.fetchone()
+                await asyncio.wait_for(cur.execute("SELECT 1"), timeout=5.0)
+                await asyncio.wait_for(cur.fetchone(), timeout=5.0)
         logger.debug("✅ 数据库健康检查通过")
         return True
     except Exception as e:

@@ -132,6 +132,12 @@ class DeepSeekPriceClient:
             )
             
             # 解析返回结果
+            if not response.choices:
+                return {
+                    'success': False,
+                    'error': 'DeepSeek 返回空结果',
+                    'suggestion': '请稍后重试'
+                }
             content = response.choices[0].message.content
             
             # 提取 JSON
