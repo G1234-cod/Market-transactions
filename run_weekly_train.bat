@@ -4,7 +4,7 @@ echo 每周自动模型训练
 echo 开始时间: %date% %time%
 echo ========================================
 
-cd /d D:\Market-train
+cd /d E:\Market-transactions
 
 echo 激活虚拟环境...
 call venv\Scripts\activate
