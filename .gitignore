@@ -5,7 +5,8 @@
 *.log
 
 # 上传图片（测试产物）
-backend/static/uploads/
+backend/static/uploads/*
+!backend/static/uploads/.gitkeep
 
 # Python
 __pycache__/
@@ -29,3 +30,5 @@ frontend/.vite/
 Thumbs.db
 数据集/val2017.zip
 数据集/annotations_trainval2017.zip
+
+run_weekly_train.bat
