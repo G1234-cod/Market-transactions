@@ -2,32 +2,155 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+@layer base {
+  :root {
+    --color-primary-50: #eff6ff;
+    --color-primary-100: #dbeafe;
+    --color-primary-200: #bfdbfe;
+    --color-primary-300: #93c5fd;
+    --color-primary-400: #60a5fa;
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563eb;
+    --color-primary-700: #1d4ed8;
+    --color-primary-800: #1e40af;
+    --color-primary-900: #1e3a8a;
+
+    --color-accent-50: #fdf4ff;
+    --color-accent-100: #fae8ff;
+    --color-accent-200: #f5d0fe;
+    --color-accent-300: #f0abfc;
+    --color-accent-400: #e879f9;
+    --color-accent-500: #d946ef;
+    --color-accent-600: #c026d3;
+
+    --color-surface: #ffffff;
+    --color-surface-secondary: #f8fafc;
+    --color-surface-tertiary: #f1f5f9;
+
+    --color-text-primary: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-text-muted: #94a3b8;
+
+    --color-border: #e2e8f0;
+    --color-border-light: #f1f5f9;
+
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --radius-sm: 0.5rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-xl: 1.25rem;
+    --radius-2xl: 1.5rem;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-margin-top: 80px;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 50%, #fdf4ff 100%);
+    color: var(--color-text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
 }
 
-/* 自定义滚动条 */
+@layer components {
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-md border border-white/50 shadow-lg;
+  }
+
+  .gradient-primary {
+    @apply bg-gradient-to-r from-primary-500 via-primary-600 to-accent-500;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-600 via-accent-500 to-primary-700 bg-clip-text text-transparent;
+  }
+
+  .btn-primary {
+    @apply px-6 py-2.5 rounded-xl font-semibold text-white gradient-primary shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-2.5 rounded-xl font-semibold text-text-secondary bg-surface-secondary border border-border hover:bg-surface-tertiary hover:text-text-primary transition-all duration-200;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 bg-surface-secondary border border-border rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:outline-none transition-all duration-200;
+  }
+
+  .badge {
+    @apply px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 8s ease infinite;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .animate-float {
+    animation: none;
+  }
+  .animate-gradient {
+    background-size: 100% 100%;
+    animation: none;
+  }
+}
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-/* 页面过渡 */
 .page-enter-active,
 .page-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .page-enter-from { opacity: 0; transform: translateY(8px); }
 .page-leave-to   { opacity: 0; transform: translateY(-8px); }
 
-/* 步骤卡片过渡 */
-.step-enter-active { transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
-.step-leave-active  { transition: all 0.2s ease-in; }
+.step-enter-active { transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.step-leave-active  { transition: opacity 0.2s ease-in, transform 0.2s ease-in; }
 .step-enter-from    { opacity: 0; transform: translateX(24px); }
 .step-leave-to      { opacity: 0; transform: translateX(-24px); }
 
-/* 打字机光标闪烁 */
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 .cursor-blink::after {
   content: '|';
   animation: blink 0.8s infinite;
-  color: #3b82f6;
+  color: var(--color-primary-500);
 }

@@ -1,28 +1,31 @@
 <template>
   <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
-    <!-- 顶栏 -->
-    <header v-if="isLoggedIn || routePath === '/market'" class="sticky top-0 z-50 backdrop-blur-md bg-white/80 border-b border-gray-200/60 shadow-sm">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 px-4 py-2 bg-primary-600 text-white rounded-lg z-50">
+      跳转到主内容
+    </a>
+
+    <header v-if="isLoggedIn || routePath === '/market'" class="sticky top-0 z-50 backdrop-blur-md bg-white/80 border-b border-gray-200/60 shadow-sm" role="navigation">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <router-link to="/" class="flex items-center gap-2.5 group">
-          <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-blue-500/25">二</span>
-          <span class="text-lg font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">智能二手商品发布助手</span>
+        <router-link to="/" class="flex items-center gap-2.5 group" aria-label="返回首页">
+          <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-primary-500/25">二</span>
+          <span class="text-lg font-bold bg-gradient-to-r from-primary-600 via-accent-500 to-primary-800 bg-clip-text text-transparent">智能二手商品发布助手</span>
         </router-link>
-        <nav class="flex items-center gap-1">
+        <nav class="flex items-center gap-1" aria-label="主导航">
           <template v-if="isLoggedIn">
-            <router-link to="/" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
-              :class="$route.path === '/' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-blue-600'">发布</router-link>
-            <router-link to="/history" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
-              :class="$route.path === '/history' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-blue-600'">历史</router-link>
+            <router-link to="/" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all focus:ring-2 focus:ring-primary-400 focus:outline-none"
+              :class="$route.path === '/' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-primary-600'">发布</router-link>
+            <router-link to="/history" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all focus:ring-2 focus:ring-primary-400 focus:outline-none"
+              :class="$route.path === '/history' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-primary-600'">历史</router-link>
           </template>
-          <router-link to="/market" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
-            :class="$route.path === '/market' ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:text-blue-600'">商城</router-link>
+          <router-link to="/market" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all focus:ring-2 focus:ring-primary-400 focus:outline-none"
+            :class="$route.path === '/market' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-primary-600'">商城</router-link>
           <span v-if="user" class="ml-3 text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">{{ user.username }}</span>
-          <button v-if="isLoggedIn" class="ml-1 px-3 py-1 text-xs text-gray-400 hover:text-red-500 transition-colors" @click="doLogout">退出</button>
+          <button v-if="isLoggedIn" class="ml-1 px-3 py-1 text-xs text-gray-400 hover:text-red-500 transition-colors focus:ring-2 focus:ring-red-400 focus:outline-none rounded-full" @click="doLogout" aria-label="退出登录">退出</button>
         </nav>
       </div>
     </header>
 
-    <main class="max-w-5xl mx-auto px-4 py-8">
+    <main id="main-content" class="max-w-5xl mx-auto px-4 py-8">
       <router-view v-slot="{ Component }">
         <transition name="page" mode="out-in">
           <component :is="Component" />
@@ -30,18 +33,17 @@
       </router-view>
     </main>
 
-    <footer class="text-center py-6 text-xs text-gray-400">
+    <footer class="text-center py-6 text-xs text-gray-400" role="contentinfo">
       智能二手商品发布助手 · Qwen-VL-Max + DeepSeek-V4-Pro · FastAPI + Vue 3
     </footer>
 
-    <!-- Toast -->
-    <TransitionGroup name="toast" tag="div" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-80">
+    <TransitionGroup name="toast" tag="div" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-80" aria-live="polite">
       <div v-for="msg in toasts" :key="msg.id"
         class="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm backdrop-blur-md animate-slide-up"
         :class="toastClass(msg.type)">
         <span class="text-lg">{{ toastIcon(msg.type) }}</span>
         <span class="flex-1">{{ msg.text }}</span>
-        <button class="opacity-50 hover:opacity-100" @click="removeToast(msg.id)">×</button>
+        <button class="opacity-50 hover:opacity-100 focus:ring-2 focus:ring-gray-400 focus:outline-none" @click="removeToast(msg.id)" aria-label="关闭提示">×</button>
       </div>
     </TransitionGroup>
   </div>

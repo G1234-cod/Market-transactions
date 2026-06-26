@@ -1,62 +1,95 @@
 <template>
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
+  <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg border border-white/50 p-6 space-y-5">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center text-white text-sm shadow-sm shadow-amber-200">✎</div>
+      <div class="relative">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-amber-200">✎</div>
+        <div class="absolute -inset-1 bg-gradient-to-br from-amber-300 to-orange-300 rounded-xl blur-lg opacity-30 -z-10"></div>
+      </div>
       <div>
         <h3 class="font-semibold text-gray-800">确认商品信息</h3>
         <p class="text-xs text-gray-400">AI 识别结果，可修改后确认</p>
       </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3">
-      <label class="block">
-        <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">品类</span>
-        <input v-model="local.category" placeholder="例如：手机、笔记本"
-          class="w-full mt-1 px-3 py-2.5 border rounded-xl outline-none transition-all text-sm"
-          :class="borderClass('category')" />
+    <div class="grid grid-cols-2 gap-4">
+      <div class="space-y-1.5">
+        <label for="category" class="block text-xs text-gray-500 font-medium uppercase tracking-wider">品类</label>
+        <input 
+          id="category"
+          v-model="local.category" 
+          placeholder="例如：手机、笔记本…"
+          class="w-full px-4 py-2.5 border rounded-xl text-sm outline-none transition-all"
+          :class="borderClass('category')"
+          autocomplete="off"
+        />
         <p v-if="fieldMsg('category')" class="text-xs mt-1 ml-1" :class="msgColor('category')">{{ fieldMsg('category') }}</p>
-      </label>
+      </div>
 
-      <label class="block">
-        <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">品牌 <span class="text-red-400">*</span></span>
-        <input v-model="local.brand" placeholder="例如：Apple、罗技" maxlength="50"
-          class="w-full mt-1 px-3 py-2.5 border rounded-xl outline-none transition-all text-sm"
-          :class="borderClass('brand')" />
+      <div class="space-y-1.5">
+        <label for="brand" class="block text-xs text-gray-500 font-medium uppercase tracking-wider">品牌 <span class="text-red-500">*</span></label>
+        <input 
+          id="brand"
+          v-model="local.brand" 
+          placeholder="例如：Apple、罗技…" 
+          maxlength="50"
+          class="w-full px-4 py-2.5 border rounded-xl text-sm outline-none transition-all"
+          :class="borderClass('brand')"
+          autocomplete="off"
+          aria-required="true"
+        />
         <p v-if="fieldMsg('brand')" class="text-xs mt-1 ml-1" :class="msgColor('brand')">{{ fieldMsg('brand') }}</p>
-      </label>
+      </div>
 
-      <label class="block col-span-2">
-        <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">型号 <span class="text-red-400">*</span></span>
-        <input v-model="local.model" placeholder="例如：iPhone 13、G610 机械键盘" maxlength="100"
-          class="w-full mt-1 px-3 py-2.5 border rounded-xl outline-none transition-all text-sm"
-          :class="borderClass('model')" />
+      <div class="space-y-1.5 col-span-2">
+        <label for="model" class="block text-xs text-gray-500 font-medium uppercase tracking-wider">型号 <span class="text-red-500">*</span></label>
+        <input 
+          id="model"
+          v-model="local.model" 
+          placeholder="例如：iPhone 13、G610 机械键盘…" 
+          maxlength="100"
+          class="w-full px-4 py-2.5 border rounded-xl text-sm outline-none transition-all"
+          :class="borderClass('model')"
+          autocomplete="off"
+          aria-required="true"
+        />
         <p v-if="fieldMsg('model')" class="text-xs mt-1 ml-1" :class="msgColor('model')">{{ fieldMsg('model') }}</p>
-      </label>
+      </div>
 
-      <label class="block col-span-2">
-        <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">成色描述</span>
-        <textarea v-model="local.condition" rows="3" placeholder="例如：9成新，屏幕有细微划痕，电池健康度85%" maxlength="200"
-          class="w-full mt-1 px-3 py-2.5 border rounded-xl outline-none transition-all text-sm resize-none"
-          :class="borderClass('condition')" />
-        <p v-if="fieldMsg('condition')" class="text-xs mt-1 ml-1 text-red-400">{{ fieldMsg('condition') }}</p>
-      </label>
+      <div class="space-y-1.5 col-span-2">
+        <label for="condition" class="block text-xs text-gray-500 font-medium uppercase tracking-wider">成色描述</label>
+        <textarea 
+          id="condition"
+          v-model="local.condition" 
+          rows="3" 
+          placeholder="例如：9成新，屏幕有细微划痕，电池健康度85%…" 
+          maxlength="200"
+          class="w-full px-4 py-2.5 border rounded-xl text-sm outline-none transition-all resize-none"
+          :class="borderClass('condition')"
+        />
+        <p v-if="fieldMsg('condition')" class="text-xs mt-1 ml-1 text-red-500">{{ fieldMsg('condition') }}</p>
+      </div>
     </div>
 
-    <!-- 行情信息 -->
     <div v-if="priceInfo && priceInfo.matched" class="rounded-xl overflow-hidden">
-      <div class="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-100 px-4 py-3">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs text-emerald-600 font-medium">📊 市场行情参考</span>
+      <div class="bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 border border-emerald-100 px-4 py-4">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs text-emerald-600 font-medium flex items-center gap-1.5">
+            <span>📊</span> 市场行情参考
+          </span>
           <span class="text-xs text-emerald-500">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
         </div>
         <div class="flex items-end gap-6">
-          <div><p class="text-xs text-emerald-600/70">均价</p><p class="text-xl font-bold text-emerald-700">¥{{ priceInfo.avg_price }}</p></div>
+          <div>
+            <p class="text-xs text-emerald-600/70">均价</p>
+            <p class="text-2xl font-bold text-emerald-700">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
+          </div>
           <div class="flex-1 pb-1.5">
             <div class="flex justify-between text-[10px] text-emerald-600/60 mb-0.5">
-              <span>¥{{ priceInfo.low_price }}</span><span>¥{{ priceInfo.high_price }}</span>
+              <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
+              <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
             </div>
-            <div class="relative h-2 bg-emerald-200 rounded-full overflow-hidden">
-              <div class="absolute top-0 bottom-0 bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-500"
+            <div class="relative h-2.5 bg-emerald-200 rounded-full overflow-hidden">
+              <div class="absolute top-0 bottom-0 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 rounded-full transition-all duration-700"
                 :style="{ left: lowPct + '%', width: rangePct + '%' }" />
             </div>
           </div>
@@ -64,49 +97,48 @@
       </div>
     </div>
     <div v-else-if="priceInfo && !priceInfo.matched"
-      class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 flex items-center gap-2">
-      <span>💡</span> 暂无该型号的市场行情，AI 将根据经验生成建议价
+      class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+      <span class="text-lg">💡</span>
+      <span>暂无该型号的市场行情，AI 将根据经验生成建议价</span>
     </div>
 
-    <!-- 警告提示（黄色，不阻止发布） -->
-    <div v-if="warnings.length" class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs space-y-1">
+    <div v-if="warnings.length" class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-xs space-y-1">
       <p class="text-amber-700 font-medium flex items-center gap-1.5"><span>⚠️</span> 温馨提示：</p>
       <ul class="list-disc list-inside space-y-0.5 text-amber-600">
         <li v-for="m in warnings" :key="m">{{ m }}</li>
       </ul>
     </div>
 
-    <!-- 错误提示（红色，阻止发布） -->
-    <div v-if="errors.length" class="rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-xs text-red-600 space-y-1">
+    <div v-if="errors.length" class="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-xs text-red-600 space-y-1" role="alert" aria-live="polite">
       <p class="font-medium">请修正以下问题后重试：</p>
       <ul class="list-disc list-inside space-y-0.5">
         <li v-for="m in errors" :key="m">{{ m }}</li>
       </ul>
     </div>
 
-    <!-- 按钮行 -->
-    <div class="flex gap-2">
+    <div class="flex gap-3 pt-2">
       <button
-        class="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
         :class="canPublish && !loading
-          ? 'bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 shadow-lg shadow-blue-500/25'
+          ? 'bg-gradient-to-r from-primary-500 via-primary-600 to-accent-500 hover:from-primary-600 hover:via-primary-700 hover:to-accent-600 shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 transform hover:-translate-y-0.5 active:translate-y-0'
           : 'bg-gray-300'"
         :disabled="!canPublish || loading"
         @click="$emit('confirm', local)"
       >
-        <span v-if="loading" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        {{ loading ? '查询行情中...' : '✨ 确认并生成文案' }}
+        <span v-if="loading" class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        {{ loading ? '查询行情中…' : '✨ 确认并生成文案' }}
       </button>
 
       <button
-        class="px-5 py-3.5 rounded-xl font-medium border transition-all flex items-center gap-1.5"
+        class="px-6 py-3.5 rounded-xl font-medium border transition-all flex items-center gap-2"
         :class="canSaveDraft
           ? 'text-gray-500 border-gray-200 hover:bg-gray-50 hover:text-gray-700'
           : 'text-gray-300 border-gray-100 cursor-not-allowed'"
         :disabled="!canSaveDraft || loading"
         @click="$emit('saveDraft', local)"
+        aria-label="保存草稿"
       >
-        💾 存草稿
+        <span>💾</span> 存草稿
       </button>
     </div>
   </div>

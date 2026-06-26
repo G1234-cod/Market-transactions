@@ -1,27 +1,32 @@
 <template>
-  <div class="bg-white rounded-xl border border-gray-100 p-4 flex gap-4 hover:shadow-md hover:border-gray-200 transition-all group">
-    <!-- 图片占位 -->
-    <div class="w-20 h-20 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
-      <img v-if="item.original_image_url" :src="item.original_image_url" class="w-full h-full object-cover" />
-      <span v-else class="text-2xl text-blue-300">📷</span>
+  <div class="bg-white/80 backdrop-blur-md rounded-xl border border-white/50 p-5 flex gap-5 hover:shadow-lg hover:border-primary-200 transition-all duration-300 group">
+    <div class="relative w-24 h-24 rounded-xl bg-gradient-to-br from-primary-50 to-accent-50 flex-shrink-0 flex items-center justify-center overflow-hidden">
+      <img 
+        v-if="item.original_image_url" 
+        :src="item.original_image_url" 
+        class="w-full h-full object-cover"
+        alt="商品图片"
+      />
+      <span v-else class="text-3xl text-primary-300">📷</span>
     </div>
     <div class="flex-1 min-w-0">
-      <div class="flex items-start justify-between gap-2">
-        <h4 class="font-semibold text-gray-800 truncate group-hover:text-blue-600 transition-colors">{{ item.ai_generated_title || '未命名商品' }}</h4>
-        <span class="px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0"
+      <div class="flex items-start justify-between gap-3">
+        <h4 class="font-semibold text-gray-800 truncate group-hover:text-primary-600 transition-colors">{{ item.ai_generated_title || '未命名商品' }}</h4>
+        <span class="px-3 py-1 rounded-full text-xs font-medium flex-shrink-0"
           :class="statusBadge(item.status)">{{ statusLabel(item.status) }}</span>
       </div>
-      <p class="text-sm text-gray-500 mt-1.5 line-clamp-2 leading-relaxed">{{ item.ai_generated_desc }}</p>
-      <div class="flex items-center gap-3 mt-2.5 text-xs">
-        <span v-if="item.suggested_price" class="text-red-500 font-semibold">¥{{ item.suggested_price }}</span>
+      <p class="text-sm text-gray-500 mt-2 line-clamp-2 leading-relaxed">{{ item.ai_generated_desc }}</p>
+      <div class="flex items-center gap-4 mt-3 text-xs">
+        <span v-if="item.suggested_price" class="text-red-500 font-semibold font-variant-numeric">¥{{ item.suggested_price.toLocaleString() }}</span>
         <span class="text-gray-400">{{ formatDate(item.created_at) }}</span>
-        <!-- 操作按钮 -->
         <button v-if="item.status === 'published'"
-          class="ml-auto px-2.5 py-1 rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all text-[11px]"
-          @click.stop="$emit('delist', item.id)">下架</button>
+          class="ml-auto px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-all text-xs font-medium focus:ring-2 focus:ring-red-400 focus:outline-none"
+          @click.stop="$emit('delist', item.id)"
+          aria-label="下架商品">下架</button>
         <button v-if="item.status === 'draft'"
-          class="ml-auto px-2.5 py-1 rounded-lg border border-gray-200 text-gray-400 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50 transition-all text-[11px]"
-          @click.stop="$emit('publish', item.id)">发布</button>
+          class="ml-auto px-3 py-1.5 rounded-lg border border-primary-200 text-primary-600 hover:text-primary-700 hover:border-primary-300 hover:bg-primary-50 transition-all text-xs font-medium focus:ring-2 focus:ring-primary-400 focus:outline-none"
+          @click.stop="$emit('publish', item.id)"
+          aria-label="发布商品">发布</button>
       </div>
     </div>
   </div>
