@@ -38,6 +38,10 @@ EPOCHS = 20
 BATCH_SIZE = 8
 IMAGE_SIZE = 640
 
+# ✅ 缺陷检测类别（与 dataset/data.yaml 一致）
+DEFECT_CLASSES = ['scratch', 'dent', 'crack', 'stain', 'other']
+DEFECT_CLASSES_CN = ['划痕', '磕碰', '裂痕', '污渍', '其他']
+
 
 def parse_label_file(label_path: Path) -> tuple:
     """
@@ -70,7 +74,7 @@ def parse_label_file(label_path: Path) -> tuple:
 
 def get_class_id(class_name: str) -> int:
     """
-    获取类别ID（从 YOLO 模型获取类别映射）
+    获取类别ID
     
     Args:
         class_name: 类别名称（中文或英文）
@@ -81,50 +85,45 @@ def get_class_id(class_name: str) -> int:
     if not class_name:
         return 0
     
-    # 获取 YOLO 模型中的类别映射
-    try:
-        detector = get_yolo_detector()
-        model = detector.model
-        class_names = model.names  # {0: 'person', 1: 'bicycle', ...}
-        
-        # 1. 尝试精确匹配
-        class_name_lower = class_name.lower()
-        for idx, name in class_names.items():
-            if name.lower() == class_name_lower:
-                return idx
-        
-        # 2. 中文到英文映射
-        cn_to_en = {
-            '手机': 'cell phone',
-            '笔记本': 'laptop',
-            '平板': 'tablet',
-            '耳机': 'headphone',
-            '鼠标': 'mouse',
-            '键盘': 'keyboard',
-            '相机': 'camera',
-            '手表': 'watch',
-            '游戏机': 'game console',
-            '划痕': 'scratch',
-            '磕碰': 'dent',
-            '污渍': 'stain',
-            '裂痕': 'crack',
-            '掉漆': 'peeling',
-        }
-        
-        mapped = cn_to_en.get(class_name, class_name)
-        for idx, name in class_names.items():
-            if name.lower() == mapped.lower():
-                return idx
-        
-        # 3. 部分匹配
-        for idx, name in class_names.items():
-            if class_name_lower in name.lower() or name.lower() in class_name_lower:
-                return idx
-        
-    except Exception as e:
-        logger.warning(f"获取类别ID失败: {e}")
+    # 中文到英文映射
+    cn_to_en = {
+        '划痕': 'scratch',
+        '磕碰': 'dent',
+        '裂痕': 'crack',
+        '污渍': 'stain',
+        '其他': 'other',
+        '手机': 'cell phone',
+        '笔记本': 'laptop',
+        '平板': 'tablet',
+        '耳机': 'headphone',
+        '鼠标': 'mouse',
+        '键盘': 'keyboard',
+        '相机': 'camera',
+        '手表': 'watch',
+        '游戏机': 'game console',
+        '掉漆': 'peeling',
+    }
     
-    return 0  # 默认返回 0
+    # 1. 直接匹配缺陷类别
+    class_name_lower = class_name.lower()
+    for idx, name in enumerate(DEFECT_CLASSES):
+        if name.lower() == class_name_lower:
+            return idx
+    
+    # 2. 中文映射
+    mapped = cn_to_en.get(class_name, class_name)
+    for idx, name in enumerate(DEFECT_CLASSES):
+        if name.lower() == mapped.lower():
+            return idx
+    
+    # 3. 部分匹配
+    for idx, name in enumerate(DEFECT_CLASSES):
+        if class_name_lower in name.lower() or name.lower() in class_name_lower:
+            return idx
+    
+    # 4. 如果都没匹配到，默认返回 0 (scratch)
+    logger.warning(f"⚠️ 未找到类别 '{class_name}' 的映射，使用默认类别 scratch")
+    return 0
 
 
 async def get_error_cases_from_db(limit: int = 500) -> List[Dict[str, Any]]:
@@ -257,8 +256,9 @@ def generate_yolo_label(
         # ✅ 使用 YOLO 检测真实边界框
         if use_detection:
             try:
+                # ✅ 修复：传入 PIL Image 而不是路径字符串
                 detector = get_yolo_detector()
-                detections = detector.detect(str(image_path), conf_threshold=0.3)
+                detections = detector.detect(img, conf_threshold=0.3)
                 
                 if detections:
                     # 使用置信度最高的检测结果
@@ -382,29 +382,22 @@ def prepare_dataset(
     
     logger.info(f"✅ 成功处理: 训练 {train_count} 张，验证 {val_count} 张")
     
-    # 生成 data.yaml
+    # ✅ 生成 data.yaml（使用缺陷检测类别，而非 COCO 80 类）
     data_yaml = {
         'path': str(dataset_dir.absolute()),
         'train': 'images/train',
         'val': 'images/val',
-        'nc': 80,
-        'names': ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
-                  'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
-                  'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra',
-                  'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
-                  'skis', 'snowboard', 'sports ball', 'baseball bat', 'baseball glove',
-                  'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup',
-                  'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange',
-                  'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
-                  'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse',
-                  'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
-                  'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
-                  'hair drier', 'toothbrush']
+        'nc': len(DEFECT_CLASSES),
+        'names': DEFECT_CLASSES
     }
     
     yaml_path = dataset_dir / "data.yaml"
     with open(yaml_path, 'w', encoding='utf-8') as f:
         yaml.dump(data_yaml, f, allow_unicode=True)
+    
+    logger.info(f"✅ data.yaml 已创建: {yaml_path}")
+    logger.info(f"   类别数: {len(DEFECT_CLASSES)}")
+    logger.info(f"   类别: {DEFECT_CLASSES}")
     
     return yaml_path
 
@@ -429,16 +422,15 @@ def run_training(data_yaml: Path, output_dir: Path) -> bool:
             logger.warning("⚠️ 未检测到 GPU，使用 CPU（训练会很慢）")
             device = 'cpu'
         
-        # 加载模型
-        if MODEL_PATH.exists():
-            model = YOLO(str(MODEL_PATH))
-            logger.info(f"✅ 加载模型: {MODEL_PATH}")
-        else:
-            model = YOLO('yolov8n.pt')
-            logger.info("✅ 使用预训练模型 yolov8n.pt")
+        # ✅ 使用基础模型，而不是从已有模型加载（避免类别数不匹配）
+        # 如果存在模型但类别数不匹配，使用预训练模型
+        model = YOLO('yolov8n.pt')
+        logger.info("✅ 使用预训练模型 yolov8n.pt 作为基础")
         
         # 训练
         logger.info("🚀 开始微调训练...")
+        logger.info(f"   类别数: {len(DEFECT_CLASSES)}")
+        logger.info(f"   类别: {DEFECT_CLASSES}")
         model.train(
             data=str(data_yaml),
             epochs=EPOCHS,
@@ -468,8 +460,15 @@ def run_training(data_yaml: Path, output_dir: Path) -> bool:
             shutil.copy(new_model, MODEL_PATH)
             logger.info(f"✅ 模型已更新: {MODEL_PATH}")
             
-            # 标记错误数据为已修复
-            asyncio.run(mark_cases_fixed())
+            # ✅ 标记错误数据为已修复（使用同步方式）
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                # 如果已经在事件循环中，创建任务
+                loop.create_task(mark_cases_fixed())
+            except RuntimeError:
+                # 没有运行中的事件循环，使用 asyncio.run()
+                asyncio.run(mark_cases_fixed())
             return True
         else:
             logger.error("❌ 训练失败，模型未生成")
@@ -493,15 +492,15 @@ async def mark_cases_fixed():
 
 
 async def main_async():
-    """异步主函数"""
+    """✅ 异步主函数"""
     logger.info("=" * 60)
     logger.info(f"🚀 每周自动训练 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
     
-    # 1. 获取错误数据
+    # 1. ✅ 使用 await 获取错误数据
     cases = await get_error_cases_from_db(limit=500)
     if not cases:
-        cases = get_error_cases_from_local(limit=500)
+        cases = await get_error_cases_from_local(limit=500)
     
     if not cases:
         logger.info("✅ 没有错误数据，无需训练")
@@ -525,9 +524,31 @@ async def main_async():
         logger.error("❌ 每周训练失败")
 
 
+# ============================================================
+# ✅ 正确的入口函数
+# ============================================================
+
 def main():
-    """同步入口"""
-    asyncio.run(main_async())
+    """
+    同步入口
+    
+    asyncio.run() 会自动：
+    1. 创建新的事件循环
+    2. 运行协程直到完成
+    3. 关闭事件循环
+    
+    这是 Python 3.7+ 推荐的方式
+    """
+    try:
+        asyncio.run(main_async())
+    except RuntimeError as e:
+        # 如果已经在事件循环中，使用 get_event_loop
+        if "cannot be called from a running event loop" in str(e):
+            logger.warning("⚠️ 已在事件循环中，使用 get_event_loop")
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(main_async())
+        else:
+            raise
 
 
 if __name__ == '__main__':

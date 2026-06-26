@@ -1,15 +1,16 @@
 """GET /api/v1/history — 查询发布历史 + POST /api/v1/history/save — 保存发布记录 + 下架/发布操作"""
 import logging
-import requests
-from PIL import Image
 import io
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends, HTTPException, status
+from PIL import Image
+import httpx
 
 from app.models.schemas import HistoryItem, GenerateSaveRequest
 from app.db import crud
 from app.ml.clip_extractor import get_extractor
 from app.ml.qdrant_client import get_qdrant
 from app.config import get_static_url, get_base_url, build_full_url
+from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +30,18 @@ def build_image_url(image_url: str) -> str:
     if not image_url:
         return ""
     
-    # 已经是完整URL
     if image_url.startswith("http://") or image_url.startswith("https://"):
         return image_url
     
-    # 以 /static/ 开头
     if image_url.startswith("/static/"):
         return f"{get_base_url()}{image_url}"
     
-    # 使用静态文件工具函数
     return get_static_url(image_url)
 
 
 @router.get("/history")
 async def get_history(
-    user_id: int = Query(default=1)  # TODO: 后续改为 JWT 依赖
+    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取，不可伪造
 ):
     """查询当前用户的发布记录列表"""
     rows = await crud.get_history(user_id)
@@ -60,20 +58,26 @@ async def get_history(
             suggested_price=float(r["suggested_price"]) if r.get("suggested_price") else None,
             status=r["status"],
             category=r.get("category"),
+            condition=r.get("condition"),  # ✅ 使用 condition
+            views=r.get("views", 0),
+            likes=r.get("likes", 0),
             created_at=str(r["created_at"]),
         ))
     return {"items": items}
 
 
 @router.post("/history/save")
-async def save_history(payload: GenerateSaveRequest):
+async def save_history(
+    payload: GenerateSaveRequest,
+    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取，不可伪造
+):
     """
     保存生成的文案到发布记录（可指定 status: published / draft）
     保存成功后自动加入以图搜图索引
     """
-    # 1. 保存商品到 MySQL ✅ 传入 category
+    # ✅ 使用从 JWT 获取的 user_id，忽略客户端传入的
     item_id = await crud.insert_published_item(
-        user_id=payload.user_id,
+        user_id=user_id,  # ✅ 来自认证，不可伪造
         image_url=payload.image_url,
         title=payload.title,
         desc=payload.desc,
@@ -82,10 +86,10 @@ async def save_history(payload: GenerateSaveRequest):
         category=payload.category,
         brand=payload.brand,
         model=payload.model,
-        condition=payload.condition,
+        condition=payload.condition,  # ✅ 使用 condition
     )
     
-    # 2. 自动加入以图搜图索引
+    # 自动加入以图搜图索引
     await add_to_search_index(item_id, payload)
     
     return {"id": item_id, "status": "saved"}
@@ -107,13 +111,13 @@ async def add_to_search_index(item_id: int, payload: GenerateSaveRequest):
             return
         
         logger.info(f"📥 下载图片: {img_url}")
-        resp = requests.get(img_url, timeout=15)
         
-        if resp.status_code != 200:
-            logger.warning(f"⚠️ 商品 {item_id} 图片下载失败，状态码: {resp.status_code}")
-            return
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(img_url)
+            response.raise_for_status()
+            content = response.content
         
-        pil_img = Image.open(io.BytesIO(resp.content))
+        pil_img = Image.open(io.BytesIO(content))
         
         extractor = get_extractor()
         vector = extractor.extract_image(pil_img)
@@ -126,29 +130,28 @@ async def add_to_search_index(item_id: int, payload: GenerateSaveRequest):
         })
         logger.info(f"✅ 商品 {item_id} 已自动加入以图搜图索引")
         
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         logger.error(f"⏱️ 商品 {item_id} 图片下载超时")
-    except requests.exceptions.ConnectionError:
-        logger.error(f"🔌 商品 {item_id} 图片连接失败")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"❌ 商品 {item_id} 图片下载失败 (HTTP {e.response.status_code})")
     except Exception as e:
         logger.error(f"❌ 商品 {item_id} 自动索引失败: {e}")
 
 
 @router.post("/history/{item_id}/delist")
 async def delist_item(
-    item_id: int
-    # user_id: int = Depends(get_current_user)  # TODO: 后续改为 JWT 依赖
+    item_id: int,
+    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取
 ):
     """
     下架商品（仅限商品所有者）
-    TODO: 后续增加资源归属校验
     """
-    # TODO: 增加商品归属校验
-    # item = await crud.get_item_by_id(item_id)
-    # if item is None:
-    #     raise HTTPException(status_code=404, detail="商品不存在")
-    # if item["user_id"] != user_id:
-    #     raise HTTPException(status_code=403, detail="无权操作此商品")
+    # ✅ 验证商品所有权
+    item = await crud.get_item_by_id(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    if item["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="无权操作此商品")
     
     await crud.update_item_status(item_id, "delisted")
     
@@ -165,25 +168,23 @@ async def delist_item(
 
 @router.post("/history/{item_id}/publish")
 async def publish_item(
-    item_id: int
-    # user_id: int = Depends(get_current_user)  # TODO: 后续改为 JWT 依赖
+    item_id: int,
+    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取
 ):
     """
-    从草稿发布
-    TODO: 后续增加资源归属校验
+    从草稿发布（仅限商品所有者）
     """
-    # TODO: 增加商品归属校验
-    # item = await crud.get_item_by_id(item_id)
-    # if item is None:
-    #     raise HTTPException(status_code=404, detail="商品不存在")
-    # if item["user_id"] != user_id:
-    #     raise HTTPException(status_code=403, detail="无权操作此商品")
+    # ✅ 验证商品所有权
+    item = await crud.get_item_by_id(item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    if item["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="无权操作此商品")
     
     await crud.update_item_status(item_id, "published")
     
     # 发布时自动加入以图搜图索引（草稿时可能未索引）
     try:
-        item = await crud.get_item_by_id(item_id)
         if item:
             # 构建 payload 用于索引
             payload = GenerateSaveRequest(
@@ -196,7 +197,7 @@ async def publish_item(
                 category=item.get("category"),
                 brand=item.get("brand"),
                 model=item.get("model"),
-                condition=item.get("condition"),
+                condition=item.get("condition"),  # ✅ 使用 condition
             )
             await add_to_search_index(item_id, payload)
     except Exception as e:

@@ -1,7 +1,8 @@
 """
 全链路图片处理路由：瑕疵检测 + 画框标注 + DeepSeek 定价 + 数据库保存 + 预处理
 """
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status
 from PIL import Image
 import io
 import uuid
@@ -16,6 +17,9 @@ from app.config import settings
 from app.db import crud
 from app.utils.preprocess import get_preprocessor
 from app.utils.file_validator import validate_upload_file
+from app.dependencies import get_current_user
+from app.services.price_service import query_price
+from app.models.schemas import PriceResult  # ✅ 导入类型
 
 logger = logging.getLogger(__name__)
 
@@ -42,19 +46,18 @@ def get_price_client():
 @router.post("/process/image")
 async def process_image(
     image: UploadFile = File(...),
-    user_id: int = Form(default=1),
-    item_id: int = Form(default=None),
+    user_id: int = Depends(get_current_user),
+    item_id: Optional[int] = Form(default=None),
     category: str = Form(default="手机"),
     brand: str = Form(default="Apple"),
     model: str = Form(default="iPhone 14 Pro"),
-    market_avg_price: float = Form(default=5000)
 ):
     """
     全链路图片处理：预处理 + 瑕疵检测 + 画框标注 + 结构化数据 + DeepSeek 定价 + 数据库保存
     """
     try:
         # ============================================================
-        # ✅ 1. 文件上传校验
+        # 1. 文件上传校验
         # ============================================================
         try:
             file_content, safe_filename = await validate_upload_file(
@@ -86,7 +89,7 @@ async def process_image(
             logger.info(f"✅ 预处理完成: {preprocess_result['message']}")
 
         # ============================================================
-        # 3. 瑕疵检测（使用预处理后的图片）
+        # 3. 瑕疵检测
         # ============================================================
         detector = get_detector()
         result = detector.process(processed_image)
@@ -126,7 +129,25 @@ async def process_image(
                 logger.error(f"保存瑕疵数据到数据库失败: {e}")
 
         # ============================================================
-        # 6. DeepSeek 定价
+        # 6. ✅ 服务端查询市场均价（修复 BaseModel 访问）
+        # ============================================================
+        market_avg_price = 5000.0  # fallback 默认值
+        
+        try:
+            # ✅ 查询市场行情（返回 PriceResult 对象）
+            price_result: PriceResult = await query_price(brand=brand, model=model)
+            
+            # ✅ 使用 . 属性访问（BaseModel 正确方式）
+            if price_result and price_result.avg_price:
+                market_avg_price = float(price_result.avg_price)
+                logger.info(f"✅ 查询到市场均价: {market_avg_price}")
+            else:
+                logger.warning(f"⚠️ 未查询到 {brand} {model} 的行情数据，使用默认值")
+        except Exception as e:
+            logger.error(f"❌ 查询市场行情失败: {e}，使用默认值")
+
+        # ============================================================
+        # 7. DeepSeek 定价
         # ============================================================
         deepseek_data = None
         price_suggestion = None
@@ -159,7 +180,7 @@ async def process_image(
                 }
 
         # ============================================================
-        # 7. 构建返回数据
+        # 8. 构建返回数据
         # ============================================================
         response_data = {
             'success': True,
@@ -180,6 +201,7 @@ async def process_image(
                 'original_filename': safe_filename,
                 'file_size': len(content)
             },
+            'market_price': market_avg_price,
             'message': f"处理完成，检测到 {result['defect_count']} 个瑕疵"
         }
 
@@ -215,7 +237,7 @@ async def process_health():
             'deepseek_status': deepseek_status
         }
     except Exception as e:
-        return {
-            'status': 'unhealthy',
-            'error': str(e)
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "unhealthy", "error": str(e)}
+        )

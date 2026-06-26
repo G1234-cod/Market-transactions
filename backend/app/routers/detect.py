@@ -1,7 +1,5 @@
-"""
-YOLOv8 检测 API - 独立路由 + 预处理
-"""
-from fastapi import APIRouter, UploadFile, File, HTTPException
+"""YOLOv8 检测 API - 独立路由 + 预处理"""
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
 from PIL import Image
 import io
 import logging
@@ -10,6 +8,7 @@ from app.ml.yolo_detector import YOLODetector
 from app.utils.preprocess import get_preprocessor
 from app.utils.file_validator import validate_upload_file
 from app.config import settings
+from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +25,14 @@ def get_detector():
 
 
 @router.post("/yolo/detect")
-async def yolo_detect(image: UploadFile = File(...)):
+async def yolo_detect(
+    image: UploadFile = File(...),
+    user_id: int = Depends(get_current_user),
+):
     """使用 YOLOv8 检测图片中的物品"""
     try:
         # ============================================================
-        # ✅ 1. 文件上传校验
+        # 1. 文件上传校验
         # ============================================================
         try:
             file_content, safe_filename = await validate_upload_file(
@@ -99,7 +101,7 @@ async def yolo_health():
             'model': 'yolov8'
         }
     except Exception as e:
-        return {
-            'status': 'unhealthy',
-            'error': str(e)
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "unhealthy", "error": str(e)}
+        )

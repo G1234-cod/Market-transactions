@@ -1,21 +1,26 @@
 """
 以图搜图 + 以文搜图 API
 """
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status
 from PIL import Image
 import io
 import logging
-import requests
+import httpx
 
 from app.ml.clip_extractor import get_extractor
 from app.ml.qdrant_client import get_qdrant
 from app.db import crud
 from app.config import get_static_url, get_base_url
-from app.dependencies import get_current_user_optional
+from app.dependencies import get_current_user, get_current_user_optional
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["以图搜图"])
+
+# ✅ 搜索参数限制
+MAX_TOP_K = 100
+DEFAULT_TOP_K = 10
 
 
 def build_image_url(image_url: str) -> str:
@@ -32,12 +37,15 @@ def build_image_url(image_url: str) -> str:
 @router.post("/search/image")
 async def search_by_image(
     image: UploadFile = File(...),
-    top_k: int = Form(10),
+    top_k: int = Form(10, ge=1, le=MAX_TOP_K),  # ✅ 添加范围验证
     filter_category: str = Form(default=""),
-    user_id: int = Depends(get_current_user_optional),
+    user_id: int = Depends(get_current_user),
 ):
     """
     以图搜图：上传图片，返回相似商品列表
+    
+    Args:
+        top_k: 返回结果数量 (1-100)
     """
     try:
         content = await image.read()
@@ -50,7 +58,7 @@ async def search_by_image(
         results = qdrant.search(
             vector=vector,
             top_k=top_k,
-            filter_category=filter_category if filter_category else None,  # ✅ 直接传字符串
+            filter_category=filter_category if filter_category else None,
         )
 
         items = []
@@ -85,29 +93,27 @@ async def search_by_image(
 @router.post("/search/text")
 async def search_by_text(
     text: str = Form(..., description="商品描述文本"),
-    top_k: int = Form(10, description="返回结果数量"),
-    category: str = Form(None, description="筛选品类（可选）"),
-    user_id: int = Depends(get_current_user_optional),
+    top_k: int = Form(10, ge=1, le=MAX_TOP_K),  # ✅ 添加范围验证
+    category: Optional[str] = Form(None, description="筛选品类（可选）"),
+    user_id: int = Depends(get_current_user),
 ):
     """
     以文搜图：输入文字描述，返回匹配的商品列表
-
-    示例：
-    - 搜索 "红色手机" → 返回匹配的商品
-    - 搜索 "iPhone 13" → 返回 iPhone 13 相关商品
-    - 搜索 "笔记本" → 返回所有笔记本
+    
+    Args:
+        top_k: 返回结果数量 (1-100)
     """
     try:
         # 1. 提取文本特征向量
         extractor = get_extractor()
         vector = extractor.extract_text(text)
 
-        # 2. Qdrant 检索 ✅ 直接传入 category 字符串
+        # 2. Qdrant 检索
         qdrant = get_qdrant()
         results = qdrant.search(
             vector=vector,
             top_k=top_k,
-            filter_category=category if category else None,  # ✅ 直接传字符串
+            filter_category=category if category else None,
         )
 
         # 3. 查询商品详情
@@ -146,7 +152,7 @@ async def add_to_index(
     image_url: str = Form(...),
     title: str = Form(""),
     category: str = Form(""),
-    user_id: int = Depends(get_current_user_optional),
+    user_id: int = Depends(get_current_user),
 ):
     """商品上架时加入索引"""
     try:
@@ -154,11 +160,13 @@ async def add_to_index(
         if not full_url:
             raise HTTPException(status_code=400, detail="无效的图片URL")
 
-        response = requests.get(full_url, timeout=15)
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="图片下载失败")
+        # 使用 httpx.AsyncClient 异步下载
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(full_url)
+            response.raise_for_status()
+            content = response.content
 
-        pil_image = Image.open(io.BytesIO(response.content))
+        pil_image = Image.open(io.BytesIO(content))
 
         extractor = get_extractor()
         vector = extractor.extract_image(pil_image)
@@ -176,6 +184,12 @@ async def add_to_index(
             'message': '已加入索引'
         }
 
+    except httpx.TimeoutException:
+        logger.error(f"⏱️ 图片下载超时: {image_url}")
+        raise HTTPException(status_code=408, detail="图片下载超时")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"❌ 图片下载失败 (HTTP {e.response.status_code}): {image_url}")
+        raise HTTPException(status_code=400, detail=f"图片下载失败: HTTP {e.response.status_code}")
     except HTTPException:
         raise
     except Exception as e:
@@ -209,11 +223,13 @@ async def search_health():
         return {
             "status": "healthy",
             "clip_model": extractor.model_name,
+            "clip_device": extractor.device,
+            "clip_pretrained": extractor.pretrained,
             "qdrant_collection": qdrant.collection_name,
             "qdrant_count": qdrant.count()
         }
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "unhealthy", "error": str(e)}
+        )

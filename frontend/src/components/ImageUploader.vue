@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 
 const props = defineProps({ modelValue: { type: File, default: null } })
 const emit = defineEmits(['update:modelValue'])
@@ -70,14 +70,40 @@ const dragOver = ref(false)
 const compressing = ref(false)
 const inputFile = ref(null)
 
+// ✅ 存储 blob URL 以便释放
+let currentBlobUrl = null
+
+// ✅ 释放当前 blob URL
+function revokeCurrentBlobUrl() {
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl)
+    currentBlobUrl = null
+  }
+}
+
+// ✅ 创建 blob URL（自动释放旧的）
+function createBlobUrl(file) {
+  revokeCurrentBlobUrl()
+  if (file) {
+    currentBlobUrl = URL.createObjectURL(file)
+    return currentBlobUrl
+  }
+  return ''
+}
+
 const previewUrl = computed(() => {
-  if (inputFile.value) return URL.createObjectURL(inputFile.value)
+  if (inputFile.value) {
+    return createBlobUrl(inputFile.value)
+  }
+  revokeCurrentBlobUrl()
   return ''
 })
 
 async function compressImage(file) {
   return new Promise((resolve) => {
     const img = new Image()
+    // ✅ 临时 blob URL 用于加载图片
+    const tempUrl = URL.createObjectURL(file)
     img.onload = () => {
       let { width, height } = img
       const max = 1920
@@ -91,10 +117,17 @@ async function compressImage(file) {
       const ctx = canvas.getContext('2d')
       ctx.drawImage(img, 0, 0, width, height)
       canvas.toBlob((blob) => {
+        // ✅ 释放临时 blob URL
+        URL.revokeObjectURL(tempUrl)
         resolve(new File([blob], file.name, { type: 'image/jpeg' }))
       }, 'image/jpeg', 0.8)
     }
-    img.src = URL.createObjectURL(file)
+    img.onerror = () => {
+      // ✅ 出错时也释放临时 blob URL
+      URL.revokeObjectURL(tempUrl)
+      resolve(file)
+    }
+    img.src = tempUrl
   })
 }
 
@@ -115,10 +148,27 @@ function handleDrop(e) {
 function handleFileChange(e) {
   const file = e.target.files[0]
   if (file) processFile(file)
+  // ✅ 重置 input 以便重复选择同一文件
+  e.target.value = ''
 }
 
 function clearImage() {
+  // ✅ 释放当前 blob URL
+  revokeCurrentBlobUrl()
   inputFile.value = null
   emit('update:modelValue', null)
 }
+
+// ✅ 组件卸载时释放 blob URL
+onBeforeUnmount(() => {
+  revokeCurrentBlobUrl()
+})
+
+// ✅ 监听 props 变化，如果外部清空了，同步清理
+watch(() => props.modelValue, (newVal) => {
+  if (newVal === null && inputFile.value !== null) {
+    revokeCurrentBlobUrl()
+    inputFile.value = null
+  }
+})
 </script>

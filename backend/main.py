@@ -1,7 +1,8 @@
 """FastAPI 应用入口"""
 import os
+import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -17,25 +18,49 @@ from app.routers import (
     search,
 )
 from app.config import settings
+from app.db.connection import init_db, shutdown_db
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="智能二手商品发布助手", version="1.0.0")
 
 
 # ============================================================
-# CORS 配置（修复 allow_origins=["*"] + allow_credentials=True）
+# 应用生命周期管理
 # ============================================================
 
-# ✅ 使用 config.py 中的 ALLOWED_ORIGINS
+@app.on_event("startup")
+async def startup():
+    """应用启动时初始化资源"""
+    logger.info("🚀 应用启动中...")
+    await init_db()
+    logger.info("✅ 应用启动完成")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """应用关闭时释放资源"""
+    logger.info("🔄 应用关闭中...")
+    await shutdown_db()
+    logger.info("✅ 应用已关闭")
+
+
+# ============================================================
+# CORS 配置
+# ============================================================
+
 allowed_origins = settings.ALLOWED_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,        # ✅ 明确列表，不使用 "*"
-    allow_credentials=True,               # ✅ 允许携带 Cookie/Token
+    allow_origins=allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=600,                          # 预检请求缓存 10 分钟
+    max_age=600,
 )
 
 
@@ -55,7 +80,7 @@ app.include_router(search.router, prefix="/api/v1")
 
 
 # ============================================================
-# 挂载静态文件目录（图片访问）
+# 挂载静态文件目录
 # ============================================================
 
 os.makedirs("static/uploads", exist_ok=True)
@@ -77,4 +102,24 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    """健康检查接口"""
+    try:
+        from app.db.connection import health_check
+        db_ok = await health_check()
+        if not db_ok:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"status": "unhealthy", "database": "disconnected", "env": settings.ENV}
+            )
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "env": settings.ENV,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "unhealthy", "error": str(e), "env": settings.ENV}
+        )

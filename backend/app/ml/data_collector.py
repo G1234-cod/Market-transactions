@@ -64,9 +64,20 @@ class DataCollector:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"item_{item_id or 'unknown'}_{timestamp}"
         
-        # 1. 保存图片
+        # 1. 保存图片（✅ 修复：RGBA 转 RGB，确保 JPEG 兼容）
         img_path = self.images_dir / f"{filename}.jpg"
-        image.save(img_path, quality=95)
+        
+        # ✅ 如果是 RGBA 模式，转换为 RGB
+        if image.mode == 'RGBA':
+            # 创建白色背景
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            # 将 RGBA 图片粘贴到白色背景上
+            background.paste(image, mask=image.split()[3])  # 使用 alpha 通道作为掩码
+            save_image = background
+        else:
+            save_image = image.convert('RGB')  # 确保其他模式也转为 RGB
+        
+        save_image.save(img_path, 'JPEG', quality=95)
         
         # 2. 保存标签文件
         label_path = self.labels_dir / f"{filename}.txt"

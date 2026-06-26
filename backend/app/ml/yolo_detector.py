@@ -92,7 +92,7 @@ class YOLODetector:
             检测结果列表，每个结果包含:
                 - class_name: str
                 - confidence: float
-                - bbox: [x1, y1, x2, y2]
+                - bbox: [x1, y1, x2, y2] (float)
         """
         conf = conf_threshold if conf_threshold is not None else self.conf_threshold
         
@@ -108,7 +108,7 @@ class YOLODetector:
                     detections.append({
                         'class_name': class_name,
                         'confidence': float(box.conf[0]),
-                        'bbox': [float(x1), float(y1), float(x2), float(y2)]
+                        'bbox': [float(x1), float(y1), float(x2), float(y2)]  # ✅ float 类型
                     })
         
         return detections
@@ -145,8 +145,11 @@ class YOLODetector:
             'default': '#FF6B6B'
         }
         
-        for i, d in enumerate(detections):
-            x1, y1, x2, y2 = d['bbox']
+        for d in detections:
+            # ✅ 将 float 转为 int（PIL 需要 int 坐标）
+            bbox = d['bbox']
+            x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            
             class_name = d['class_name']
             confidence = d['confidence']
             

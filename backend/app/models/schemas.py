@@ -4,7 +4,7 @@ from typing import Optional, List, Any
 
 
 # ============================================================
-# 用户
+# 用户认证
 # ============================================================
 
 class LoginRequest(BaseModel):
@@ -18,8 +18,21 @@ class RegisterRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    id: int
+    """登录响应（含 JWT Token）"""
+    success: bool = True
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
     username: str
+    message: str = "登录成功"
+
+
+class RegisterResponse(BaseModel):
+    """注册响应"""
+    success: bool = True
+    user_id: int
+    username: str
+    message: str = "注册成功"
 
 
 # ============================================================
@@ -72,20 +85,20 @@ class GenerateRequest(BaseModel):
 
 
 class GenerateSaveRequest(BaseModel):
-    user_id: int = 1
+    user_id: Optional[int] = None
     image_url: str
     title: str
     desc: str
     price: float
     status: str = "published"
-    category: Optional[str] = None      # ✅ 改为 Optional
-    brand: Optional[str] = None         # ✅ 新增
-    model: Optional[str] = None         # ✅ 新增
-    condition: Optional[str] = None     # ✅ 新增
+    category: Optional[str] = None
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    condition: Optional[str] = None
 
 
 # ============================================================
-# 发布历史
+# 发布历史（✅ 统一使用 condition）
 # ============================================================
 
 class HistoryItem(BaseModel):
@@ -100,11 +113,19 @@ class HistoryItem(BaseModel):
     views: int = 0
     likes: int = 0
     category: Optional[str] = None
-    item_condition: str = "unknown"
+    condition: Optional[str] = None  # ✅ 改为 condition
+    
+    # ✅ 兼容旧字段名
+    @property
+    def item_condition(self) -> Optional[str]:
+        return self.condition
+    
+    class Config:
+        populate_by_name = True
 
 
 # ============================================================
-# 商城
+# 商城（✅ 统一使用 condition）
 # ============================================================
 
 class MarketItem(BaseModel):
@@ -116,11 +137,19 @@ class MarketItem(BaseModel):
     ai_generated_desc: Optional[str] = None
     suggested_price: Optional[float] = None
     category: Optional[str] = None
-    item_condition: str = "unknown"
+    condition: Optional[str] = None  # ✅ 改为 condition
     views: int = 0
     likes: int = 0
     created_at: str
     is_liked: bool = False
+    
+    # ✅ 兼容旧字段名
+    @property
+    def item_condition(self) -> Optional[str]:
+        return self.condition
+    
+    class Config:
+        populate_by_name = True
 
 
 # ============================================================

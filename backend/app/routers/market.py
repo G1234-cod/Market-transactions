@@ -17,7 +17,7 @@ async def get_market(
     rows = await crud.get_market_items(keyword=keyword, category=category)
     items = []
     for r in rows:
-        # ✅ 处理图片 URL（解决硬编码 localhost 问题）
+        # 处理图片 URL
         img_url = r.get("original_image_url", "")
         if img_url and not img_url.startswith("http"):
             if img_url.startswith("/static/"):
@@ -27,12 +27,16 @@ async def get_market(
         
         items.append(MarketItem(
             id=r["id"],
-            user_id=r["user_id"],                      # ✅ 已添加必填字段
+            user_id=r["user_id"],
             username=r["username"],
-            original_image_url=img_url,                # ✅ 使用完整 URL
+            original_image_url=img_url,
             ai_generated_title=r["ai_generated_title"],
             ai_generated_desc=r.get("ai_generated_desc"),
-            suggested_price=float(r["suggested_price"]) if r.get("suggested_price") else None,
+           suggested_price=float(r["suggested_price"]) if r.get("suggested_price") is not None else None,
+            category=r.get("category"),
+            condition=r.get("condition"),  # ✅ 添加 condition 字段
+            views=r.get("views", 0),
+            likes=r.get("likes", 0),
             created_at=str(r["created_at"]),
         ))
     return {"items": items}

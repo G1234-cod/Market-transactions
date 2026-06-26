@@ -44,6 +44,8 @@ class AutoTuner:
         self.best_loss = float('inf')
         self.patience_counter = 0
         self.current_lr = 0.001
+        self.current_batch = BATCH
+        self.current_dropout = 0.1
         
     def record_epoch(self, epoch, box_loss, cls_loss, dfl_loss, lr):
         """记录一轮的训练数据"""
@@ -99,45 +101,61 @@ class AutoTuner:
     def suggest_batch_size(self):
         """根据训练稳定性建议批次大小"""
         if len(self.history) < 5:
-            return BATCH
+            return self.current_batch
         
         recent_losses = [h['total_loss'] for h in self.history[-5:]]
         mean_loss = sum(recent_losses) / len(recent_losses)
         std_loss = math.sqrt(sum((x - mean_loss) ** 2 for x in recent_losses) / len(recent_losses))
         
-        if std_loss / mean_loss > 0.1 and BATCH > 4:
-            new_batch = max(4, BATCH // 2)
-            print(f"  ⚠️ 损失震荡严重 (std/mean={std_loss/mean_loss:.2%})，批次大小从 {BATCH} 减小到 {new_batch}")
+        current_batch = self.current_batch
+        
+        if std_loss / mean_loss > 0.1 and current_batch > 4:
+            new_batch = max(4, current_batch // 2)
+            print(f"  ⚠️ 损失震荡严重 (std/mean={std_loss/mean_loss:.2%})，批次大小从 {current_batch} 减小到 {new_batch}")
+            self.current_batch = new_batch
             return new_batch
         
-        if std_loss / mean_loss < 0.03 and BATCH < 32:
-            new_batch = min(32, BATCH * 2)
-            print(f"  ✅ 损失稳定，批次大小从 {BATCH} 增大到 {new_batch}")
+        if std_loss / mean_loss < 0.03 and current_batch < 32:
+            new_batch = min(32, current_batch * 2)
+            print(f"  ✅ 损失稳定，批次大小从 {current_batch} 增大到 {new_batch}")
+            self.current_batch = new_batch
             return new_batch
         
-        return BATCH
+        return current_batch
     
     def suggest_dropout(self):
         """根据过拟合程度建议 Dropout 率"""
         if len(self.history) < 5:
-            return 0.1
+            return self.current_dropout
         
         recent = self.history[-5:]
         first_loss = recent[0]['total_loss']
         last_loss = recent[-1]['total_loss']
         improvement = (first_loss - last_loss) / first_loss
         
+        current_dropout = self.current_dropout
+        
         if improvement < 0.01 and self.patience_counter > 3:
-            new_dropout = min(0.5, 0.1 + self.patience_counter * 0.02)
-            print(f"  🛡️ 可能过拟合，Dropout 从 0.1 增大到 {new_dropout:.2f}")
+            new_dropout = min(0.5, current_dropout + self.patience_counter * 0.02)
+            print(f"  🛡️ 可能过拟合，Dropout 从 {current_dropout:.2f} 增大到 {new_dropout:.2f}")
+            self.current_dropout = new_dropout
             return new_dropout
         
         if self.patience_counter == 0 and improvement > 0.05:
-            new_dropout = max(0.05, 0.1 - 0.02)
-            print(f"  ✅ 模型学习良好，Dropout 从 0.1 减小到 {new_dropout:.2f}")
+            new_dropout = max(0.05, current_dropout - 0.02)
+            print(f"  ✅ 模型学习良好，Dropout 从 {current_dropout:.2f} 减小到 {new_dropout:.2f}")
+            self.current_dropout = new_dropout
             return new_dropout
         
-        return 0.1
+        return current_dropout
+    
+    def get_training_params(self):
+        """获取当前建议的训练参数"""
+        return {
+            'lr0': self.suggest_next_lr(),
+            'batch': self.suggest_batch_size(),
+            'dropout': self.suggest_dropout()
+        }
 
 
 def get_training_status(save_dir):
@@ -177,7 +195,6 @@ def print_epoch_summary(df, epoch, auto_tuner=None):
         print(f"  📈 学习率:    {row['lr/pg0']:.8f}")
     print(f"  📅 时间:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 如果自动调参器存在，显示调参建议
     if auto_tuner:
         total_loss = row['box_loss'] + row['cls_loss'] + row['dfl_loss']
         auto_tuner.record_epoch(epoch, row['box_loss'], row['cls_loss'], row['dfl_loss'], row.get('lr/pg0', 0.001))
@@ -290,14 +307,17 @@ def train():
         
         print(f"\n{'='*70}")
         print(f"🔄 检测到已有训练进度 (已训练 {last_epoch} 轮)")
-        print(f"   本次将接着训练第 {last_epoch + 1} 到第 {last_epoch + EPOCHS_PER_RUN} 轮")
+        print(f"   🔥 本次将从第 {last_epoch + 1} 轮开始，再训练 {EPOCHS_PER_RUN} 轮")
+        print(f"   → 完成后到达第 {last_epoch + EPOCHS_PER_RUN} 轮")
         print(f"{'='*70}\n")
         print_convergence_info(df)
         
     else:
         print(f"\n{'='*70}")
         print("🚀 首次训练，本次将训练 5 轮")
-        print(f"   预计用时: 1.5 - 2 小时")
+        print(f"   🔥 本次将从第 1 轮开始，训练 {EPOCHS_PER_RUN} 轮")
+        print(f"   → 完成后到达第 {EPOCHS_PER_RUN} 轮")
+        print(f"   预计用时: {EPOCHS_PER_RUN * 0.3:.1f} - {EPOCHS_PER_RUN * 0.5:.1f} 小时")
         print(f"{'='*70}\n")
     
     # ===== 加载模型 =====
@@ -308,33 +328,39 @@ def train():
         model = YOLO(MODEL_NAME)
         print(f"✅ 加载预训练模型: {MODEL_NAME}")
     
+    # ===== 获取调参建议 =====
+    train_params = auto_tuner.get_training_params()
+    
     # ===== 开始训练 =====
     print(f"\n{'─'*70}")
     print(f"🏋️  开始训练...")
     print(f"   本次轮数: {EPOCHS_PER_RUN} 轮")
-    print(f"   批次大小: {BATCH}")
+    print(f"   批次大小: {train_params['batch']} (建议值)")
+    print(f"   学习率:   {train_params['lr0']:.6f} (建议值)")
+    print(f"   Dropout:  {train_params['dropout']:.2f} (建议值)")
     print(f"   图片尺寸: {IMGSZ}")
     print(f"   设备: {'GPU 0' if DEVICE == 0 else 'CPU'}")
     print(f"   自动调参: ✅ 已开启")
     print(f"{'─'*70}\n")
     
+    # ✅ 应用自动调参建议
     results = model.train(
         data=DATA_YAML,
         epochs=EPOCHS_PER_RUN,
         imgsz=IMGSZ,
-        batch=BATCH,
+        batch=train_params['batch'],          # ✅ 使用建议值
+        lr0=train_params['lr0'],              # ✅ 使用建议值
+        dropout=train_params['dropout'],      # ✅ 使用建议值
         resume=has_checkpoint,
         patience=PATIENCE,
         save_period=1,
         project=PROJECT,
         name=NAME,
-        device=DEVICE,  # 自动选择的设备
+        device=DEVICE,
         workers=4,
         verbose=True,
-        # 过拟合防护参数
         augment=True,
         weight_decay=0.0005,
-        dropout=0.1,
         cos_lr=True,
         warmup_epochs=3,
     )
@@ -369,21 +395,16 @@ def train():
     else:
         print(f"\n{'='*70}")
         print(f"💡 下次运行 'python train.py' 将接着训练")
+        print(f"   🔥 下次将从第 {last_epoch + 1} 轮继续")
         print(f"   当前进度: 第 {last_epoch} 轮")
         
         # 显示下一次训练的调参建议
         if len(auto_tuner.history) >= 2:
-            print(f"\n📋 自动调参建议:")
-            new_lr = auto_tuner.suggest_next_lr()
-            new_batch = auto_tuner.suggest_batch_size()
-            new_dropout = auto_tuner.suggest_dropout()
-            
-            if new_lr != auto_tuner.current_lr:
-                print(f"   📈 建议学习率: {new_lr:.6f}")
-            if new_batch != BATCH:
-                print(f"   📊 建议批次大小: {new_batch}")
-            if new_dropout != 0.1:
-                print(f"   🛡️ 建议 Dropout: {new_dropout:.2f}")
+            next_params = auto_tuner.get_training_params()
+            print(f"\n📋 下一次训练的调参建议:")
+            print(f"   📈 建议学习率: {next_params['lr0']:.6f}")
+            print(f"   📊 建议批次大小: {next_params['batch']}")
+            print(f"   🛡️ 建议 Dropout: {next_params['dropout']:.2f}")
         
         print(f"   最佳模型: {save_dir}/weights/best.pt")
         print(f"{'='*70}\n")

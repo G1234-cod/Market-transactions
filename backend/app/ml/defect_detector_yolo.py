@@ -162,7 +162,7 @@ class DefectDetector:
         defect_type: str,
         area_ratio: float,
         confidence: float,
-        bbox: List[int]
+        bbox: List[float]  # ✅ 统一使用 float
     ) -> str:
         """
         根据瑕疵类型、面积占比、置信度判断程度等级
@@ -171,7 +171,7 @@ class DefectDetector:
             defect_type: 瑕疵类型 (scratch/dent/stain/crack/other)
             area_ratio: 瑕疵面积占图片比例
             confidence: 检测置信度
-            bbox: 边界框 [x1, y1, x2, y2]
+            bbox: 边界框 [x1, y1, x2, y2] (float)
             
         Returns:
             str: severe / moderate / minor / slight
@@ -229,7 +229,7 @@ class DefectDetector:
         
         Args:
             draw: ImageDraw 对象
-            x1, y1, x2, y2: 边界框坐标
+            x1, y1, x2, y2: 边界框坐标 (int)
             shape: circle / rectangle / polygon / dashed_box
             color: 颜色
             width: 边框宽度
@@ -315,7 +315,8 @@ class DefectDetector:
                     class_name = self.DEFECT_CLASSES.get(cls_id, 'other')
                     class_cn = self.DEFECT_NAMES_CN.get(class_name, '其他')
                     
-                    bbox = [int(x1), int(y1), int(x2), int(y2)]
+                    # ✅ 使用 float 类型（与 yolo_detector.py 一致）
+                    bbox = [float(x1), float(y1), float(x2), float(y2)]
                     
                     # 计算面积占比
                     area = (x2 - x1) * (y2 - y1)
@@ -328,10 +329,10 @@ class DefectDetector:
                         'type': class_name,
                         'type_cn': class_cn,
                         'confidence': round(conf, 3),
-                        'bbox': bbox,
+                        'bbox': bbox,  # ✅ float 类型
                         'area': int(area),
                         'area_ratio': round(area_ratio, 4),
-                        'severity': severity,                      # 程度等级（内部使用）
+                        'severity': severity,
                         'severity_label': self.SEVERITY_CONFIG[severity]['label'],
                         'shape': self.SEVERITY_CONFIG[severity]['shape'],
                         'color': self.SEVERITY_CONFIG[severity]['color'],
@@ -365,7 +366,10 @@ class DefectDetector:
         font = get_chinese_font(18)
         
         for defect in defects:
-            x1, y1, x2, y2 = defect['bbox']
+            # ✅ 将 float 转为 int（PIL 需要 int 坐标）
+            bbox = defect['bbox']
+            x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            
             color = defect['color']
             shape = defect['shape']
             severity = defect['severity']

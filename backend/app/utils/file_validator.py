@@ -1,14 +1,13 @@
-# app/utils/file_validator.py
-
 """
 文件上传校验工具
 """
 import os
-import imghdr
 import logging
 from pathlib import Path
 from typing import Tuple, Optional
 from fastapi import UploadFile, HTTPException, status
+from PIL import Image
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +34,124 @@ DEFAULT_MAX_SIZE = 10 * 1024 * 1024
 # 最大图片尺寸
 MAX_IMAGE_WIDTH = 4096
 MAX_IMAGE_HEIGHT = 4096
+
+# 预览验证块大小（用于流式读取）
+CHUNK_SIZE = 8192
+PREVIEW_SIZE = 1024 * 1024  # 1MB 用于验证
+
+
+# ============================================================
+# 使用 PIL 验证图片（替代已弃用的 imghdr）
+# ============================================================
+
+def validate_image_with_pil(content: bytes) -> Tuple[bool, str]:
+    """
+    使用 PIL 验证图片内容（替代已弃用的 imghdr）
+    
+    Args:
+        content: 文件内容
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    if not content or len(content) < 8:
+        return False, "文件内容为空或太短"
+    
+    try:
+        # 使用 PIL 验证图片
+        img = Image.open(io.BytesIO(content))
+        img.verify()  # 验证图片完整性
+        
+        # 重新打开以获取格式（verify 后需要重新打开）
+        img = Image.open(io.BytesIO(content))
+        img_format = img.format.lower() if img.format else 'unknown'
+        width, height = img.size
+        
+        # 检查尺寸限制
+        if width > MAX_IMAGE_WIDTH or height > MAX_IMAGE_HEIGHT:
+            return False, f"图片尺寸过大: {width}x{height}，最大 {MAX_IMAGE_WIDTH}x{MAX_IMAGE_HEIGHT}"
+        
+        logger.debug(f"图片验证通过: 格式={img_format}, 尺寸={width}x{height}")
+        return True, ""
+        
+    except Exception as e:
+        logger.warning(f"图片验证失败: {e}")
+        return False, f"无效的图片文件: {str(e)}"
+
+
+# ============================================================
+# 流式文件验证（防止 OOM）
+# ============================================================
+
+async def validate_file_stream(
+    file: UploadFile,
+    max_size: int = DEFAULT_MAX_SIZE,
+    check_content: bool = True,
+    chunk_size: int = CHUNK_SIZE
+) -> Tuple[bool, str, Optional[bytes]]:
+    """
+    流式验证上传文件（防止 OOM）
+    
+    Args:
+        file: 上传的文件
+        max_size: 最大文件大小
+        check_content: 是否检查内容
+        chunk_size: 读取块大小
+    
+    Returns:
+        (is_valid, error_message, file_content)
+    """
+    # 1. 验证文件名
+    valid, msg = validate_filename(file.filename)
+    if not valid:
+        return False, msg, None
+    
+    # 2. 验证文件类型
+    valid, msg = validate_file_type(
+        file.filename,
+        file.content_type or "application/octet-stream"
+    )
+    if not valid:
+        return False, msg, None
+    
+    # 3. 流式读取文件（限制大小）
+    content = bytearray()
+    total_size = 0
+    
+    try:
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            
+            total_size += len(chunk)
+            
+            # 在读取过程中检查大小
+            if total_size > max_size:
+                return False, f"文件大小 {total_size / 1024 / 1024:.2f}MB 超过限制 {max_size / 1024 / 1024:.0f}MB", None
+            
+            content.extend(chunk)
+            
+            # 如果只需要检查内容，读取足够验证即可
+            if check_content and total_size >= PREVIEW_SIZE:
+                # 已经读取了足够验证的内容，可以继续读取但不影响验证
+                pass
+                
+    except Exception as e:
+        return False, f"读取文件失败: {str(e)}", None
+    
+    if total_size == 0:
+        return False, "文件为空", None
+    
+    content_bytes = bytes(content)
+    
+    # 4. 使用 PIL 验证图片内容（替代已弃用的 imghdr）
+    if check_content:
+        valid, msg = validate_image_with_pil(content_bytes)
+        if not valid:
+            return False, msg, None
+    
+    return True, "", content_bytes
 
 
 def validate_file_type(
@@ -72,7 +189,7 @@ def validate_file_size(
     max_size: Optional[int] = None
 ) -> Tuple[bool, str]:
     """
-    验证文件大小
+    验证文件大小（向后兼容）
     
     Args:
         file_size: 文件大小（字节）
@@ -91,40 +208,6 @@ def validate_file_size(
         return False, f"文件大小 {file_size / 1024 / 1024:.2f}MB 超过限制 {max_mb:.0f}MB"
     
     return True, ""
-
-
-def validate_image_content(
-    file_content: bytes,
-    allowed_types: Optional[list] = None
-) -> Tuple[bool, str]:
-    """
-    验证图片内容（使用 imghdr）
-    
-    Args:
-        file_content: 文件内容
-        allowed_types: 允许的图片类型
-    
-    Returns:
-        (is_valid, error_message)
-    """
-    if allowed_types is None:
-        allowed_types = ['jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff']
-    
-    try:
-        # 使用 imghdr 检测图片类型
-        img_type = imghdr.what(None, h=file_content)
-        
-        if img_type is None:
-            return False, "无法识别图片格式，可能已损坏"
-        
-        if img_type not in allowed_types:
-            return False, f"不支持的图片格式: {img_type}"
-        
-        return True, ""
-        
-    except Exception as e:
-        logger.error(f"图片内容验证失败: {e}")
-        return False, f"图片验证失败: {str(e)}"
 
 
 def validate_filename(filename: str) -> Tuple[bool, str]:
@@ -164,6 +247,8 @@ def get_safe_filename(filename: str) -> str:
     Returns:
         str: 安全的文件名
     """
+    import re
+    
     # 移除路径
     safe_name = Path(filename).name
     
@@ -173,7 +258,6 @@ def get_safe_filename(filename: str) -> str:
         safe_name = safe_name.replace(char, '_')
     
     # 只保留 ASCII 字母数字和下划线
-    import re
     safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', safe_name)
     
     # 限制长度
@@ -191,11 +275,13 @@ class FileValidator:
         self,
         max_size: int = DEFAULT_MAX_SIZE,
         allowed_mime_types: Optional[dict] = None,
-        allowed_extensions: Optional[set] = None
+        allowed_extensions: Optional[set] = None,
+        chunk_size: int = CHUNK_SIZE
     ):
         self.max_size = max_size
         self.allowed_mime_types = allowed_mime_types or ALLOWED_MIME_TYPES
         self.allowed_extensions = allowed_extensions or ALLOWED_EXTENSIONS
+        self.chunk_size = chunk_size
     
     async def validate(
         self,
@@ -203,7 +289,7 @@ class FileValidator:
         check_content: bool = True
     ) -> Tuple[bool, str, Optional[bytes]]:
         """
-        完整验证上传文件
+        完整验证上传文件（流式）
         
         Args:
             file: 上传的文件
@@ -212,38 +298,12 @@ class FileValidator:
         Returns:
             (is_valid, error_message, file_content)
         """
-        # 1. 验证文件名
-        valid, msg = validate_filename(file.filename)
-        if not valid:
-            return False, msg, None
-        
-        # 2. 验证文件类型
-        valid, msg = validate_file_type(
-            file.filename,
-            file.content_type or "application/octet-stream",
-            self.allowed_mime_types
+        return await validate_file_stream(
+            file=file,
+            max_size=self.max_size,
+            check_content=check_content,
+            chunk_size=self.chunk_size
         )
-        if not valid:
-            return False, msg, None
-        
-        # 3. 读取文件内容
-        try:
-            content = await file.read()
-        except Exception as e:
-            return False, f"读取文件失败: {str(e)}", None
-        
-        # 4. 验证文件大小
-        valid, msg = validate_file_size(len(content), self.max_size)
-        if not valid:
-            return False, msg, None
-        
-        # 5. 验证图片内容
-        if check_content:
-            valid, msg = validate_image_content(content)
-            if not valid:
-                return False, msg, None
-        
-        return True, "", content
     
     def get_safe_filename(self, filename: str) -> str:
         """获取安全的文件名"""
@@ -268,7 +328,7 @@ async def validate_upload_file(
     check_content: bool = True
 ) -> Tuple[bytes, str]:
     """
-    验证上传文件的便捷函数
+    验证上传文件的便捷函数（流式）
     
     Args:
         file: 上传的文件

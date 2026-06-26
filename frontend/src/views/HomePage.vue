@@ -60,7 +60,8 @@
 </template>
 
 <script setup>
-import { ref, inject } from 'vue'
+import { ref, inject, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'  // ✅ 导入 router
 import { useUser } from '../store/user.js'
 import ImageUploader from '../components/ImageUploader.vue'
 import ConfirmCard from '../components/ConfirmCard.vue'
@@ -68,6 +69,7 @@ import TypewriterText from '../components/TypewriterText.vue'
 import { extractImage, queryPrice, generateStream, saveHistory } from '../api/index.js'
 
 const toast = inject('toast', () => {})
+const router = useRouter()  // ✅ 获取 router 实例
 const { userId } = useUser()
 
 const steps = [{ label: '上传' }, { label: '确认' }, { label: '生成' }]
@@ -81,6 +83,17 @@ const generating = ref(false)
 const generateDone = ref(false)
 const generatedText = ref('')
 const _savedForm = ref(null)
+let _sseTimeout = null
+let _streamControl = null
+
+function cancelGenerate() {
+  if (_streamControl) {
+    _streamControl.abort()
+    _streamControl = null
+    generating.value = false
+    toast('生成已取消', 'warning')
+  }
+}
 
 async function doExtract() {
   extracting.value = true
@@ -90,15 +103,28 @@ async function doExtract() {
       extractResult.value = resp.data
       extractResult.value.image_urls = resp.image_urls || []
       toast('AI 识别完成，请确认信息', 'success')
+      // ✅ 只在成功时跳转
+      extracting.value = false
+      step.value = 1
     } else {
       toast(resp.error || '识别失败，请重试', 'error')
+      extracting.value = false
+      // ✅ 不跳转，留在上传页让用户重试
     }
-  } catch {
+  } catch (e) {
+    // ✅ 检查是否为认证错误
+    if (e.response?.status === 401) {
+      toast('请先登录', 'error')
+      router.push('/login')
+      extracting.value = false
+      return
+    }
+    // ✅ 其他错误，留在上传页
     extractResult.value = { category: '', brand: '', model: '', condition: '', image_urls: [] }
     toast('视觉服务暂未就绪，请手动填写商品信息', 'warning')
-  } finally {
     extracting.value = false
-    step.value = 1
+    // ✅ 不跳转，留在上传页让用户重试
+    return
   }
 }
 
@@ -111,11 +137,20 @@ async function doSaveDraft(form) {
     desc: `品牌：${form.brand || '未填'}\n型号：${form.model || '未填'}\n成色：${form.condition || '未填'}\n品类：${form.category || '未填'}`,
     price: 0,
     status: 'draft',
+    category: form.category,      // ✅ 新增
+    brand: form.brand,            // ✅ 新增
+    model: form.model,            // ✅ 新增
+    condition: form.condition,    // ✅ 新增
   })
   toast('草稿已保存，可在"历史"页查看并继续发布', 'success')
 }
 
 async function doGenerate(form) {
+  if (_streamControl) {
+    _streamControl.abort()
+    _streamControl = null
+  }
+
   _savedForm.value = form
   queryingPrice.value = true
   try { priceInfo.value = await queryPrice(form.brand, form.model) } catch { priceInfo.value = null }
@@ -123,22 +158,131 @@ async function doGenerate(form) {
 
   step.value = 2
   generating.value = true
+  generateDone.value = false
   generatedText.value = ''
   toast('AI 正在为您生成文案...', 'info')
 
-  const { stream } = generateStream({
-    user_id: userId.value, category: form.category, brand: form.brand, model: form.model,
-    condition: form.condition, image_urls: extractResult.value.image_urls || [],
-    avg_price: priceInfo.value?.avg_price || null, low_price: priceInfo.value?.low_price || null, high_price: priceInfo.value?.high_price || null,
+  const { stream, abort } = generateStream({
+    user_id: userId.value, 
+    category: form.category, 
+    brand: form.brand, 
+    model: form.model,
+    condition: form.condition, 
+    image_urls: extractResult.value.image_urls || [],
+    avg_price: priceInfo.value?.avg_price || null, 
+    low_price: priceInfo.value?.low_price || null, 
+    high_price: priceInfo.value?.high_price || null,
   })
 
+  _streamControl = { abort }
+
   const reader = stream.getReader()
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (value.content) generatedText.value += value.content
-    if (value.done) { generating.value = false; generateDone.value = true; toast('文案生成完毕！', 'success') }
-    if (value.error) { toast(value.error, 'error'); generating.value = false }
+  let isComplete = false
+
+  _sseTimeout = setTimeout(() => {
+    if (generating.value && !isComplete) {
+      generating.value = false
+      toast('生成超时，请重试', 'error')
+      if (_streamControl) {
+        _streamControl.abort()
+        _streamControl = null
+      }
+    }
+  }, 60000)
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        if (generating.value && !isComplete) {
+          generating.value = false
+          toast('生成中断，请重试', 'warning')
+        }
+        break
+      }
+
+      const data = value
+
+      switch (data.type) {
+        case 'start':
+          console.log('🚀 开始生成:', data.message)
+          generating.value = true
+          generatedText.value = ''
+          toast('生成中...', 'info')
+          break
+
+        case 'content':
+          generatedText.value += data.content
+          break
+
+        case 'done':
+          console.log('✅ 生成完成:', data.message)
+          generating.value = false
+          generateDone.value = true
+          isComplete = true
+          toast('文案生成完毕！', 'success')
+          if (_sseTimeout) {
+            clearTimeout(_sseTimeout)
+            _sseTimeout = null
+          }
+          _streamControl = null
+          break
+
+        case 'error':
+          console.error('❌ 生成错误:', data.message)
+          generating.value = false
+          isComplete = true
+          toast(data.message || '生成失败，请重试', 'error')
+          if (_sseTimeout) {
+            clearTimeout(_sseTimeout)
+            _sseTimeout = null
+          }
+          _streamControl = null
+          break
+
+        default:
+          if (data.content) {
+            generatedText.value += data.content
+          }
+          if (data.done) {
+            generating.value = false
+            generateDone.value = true
+            isComplete = true
+            toast('文案生成完毕！', 'success')
+            if (_sseTimeout) {
+              clearTimeout(_sseTimeout)
+              _sseTimeout = null
+            }
+            _streamControl = null
+          }
+          if (data.error) {
+            generating.value = false
+            isComplete = true
+            toast(data.error, 'error')
+            if (_sseTimeout) {
+              clearTimeout(_sseTimeout)
+              _sseTimeout = null
+            }
+            _streamControl = null
+          }
+      }
+    }
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.log('SSE 请求已被取消')
+      generating.value = false
+      _streamControl = null
+      return
+    }
+    console.error('❌ SSE 流读取错误:', error)
+    generating.value = false
+    isComplete = true
+    toast('连接中断，请重试', 'error')
+    if (_sseTimeout) {
+      clearTimeout(_sseTimeout)
+      _sseTimeout = null
+    }
+    _streamControl = null
   }
 }
 
@@ -150,12 +294,46 @@ async function doSave() {
     const m = line.match(/[\d,]+/)
     if (m && (line.includes('售价') || line.includes('¥') || line.includes('￥'))) { price = parseFloat(m[0].replace(/,/g, '')); break }
   }
-  await saveHistory({ user_id: userId.value, image_url: extractResult.value.image_urls?.[0] || '', title, desc: generatedText.value, price })
+  await saveHistory({ 
+    user_id: userId.value, 
+    image_url: extractResult.value.image_urls?.[0] || '', 
+    title, 
+    desc: generatedText.value, 
+    price,
+    status: 'published',
+    category: _savedForm.value?.category,      // ✅ 新增
+    brand: _savedForm.value?.brand,            // ✅ 新增
+    model: _savedForm.value?.model,            // ✅ 新增
+    condition: _savedForm.value?.condition,    // ✅ 新增
+  })
   toast('已保存到发布记录', 'success')
 }
 
 function resetAll() {
-  step.value = 0; extractResult.value = { category: '', brand: '', model: '', condition: '' }
-  priceInfo.value = null; generatedText.value = ''; generateDone.value = false; imageFile.value = null
+  if (_streamControl) {
+    _streamControl.abort()
+    _streamControl = null
+  }
+  step.value = 0
+  extractResult.value = { category: '', brand: '', model: '', condition: '' }
+  priceInfo.value = null
+  generatedText.value = ''
+  generateDone.value = false
+  imageFile.value = null
+  if (_sseTimeout) {
+    clearTimeout(_sseTimeout)
+    _sseTimeout = null
+  }
 }
+
+onBeforeUnmount(() => {
+  if (_streamControl) {
+    _streamControl.abort()
+    _streamControl = null
+  }
+  if (_sseTimeout) {
+    clearTimeout(_sseTimeout)
+    _sseTimeout = null
+  }
+})
 </script>
