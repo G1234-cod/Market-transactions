@@ -13,10 +13,12 @@ import pandas as pd
 from datetime import datetime
 import torch
 import math
+import zipfile
+import yaml
 
 # ========== 配置参数（按需修改） ==========
 MODEL_NAME = 'yolov8m.pt'      # 模型文件（yolov8n/yolov8s/yolov8m/yolov8l/yolov8x）
-DATA_YAML = 'data.yaml'        # 数据集配置文件
+
 EPOCHS_PER_RUN = 5             # 🔑 每次只训练 5 轮（约 1.5-2 小时）
 IMGSZ = 640                    # 图片尺寸
 BATCH = 8                      # 批次大小（4060 8GB 显存建议 8）
@@ -33,6 +35,187 @@ else:
 PATIENCE = 10                  # 🔑 连续10轮没提升就自动停止
 PROJECT = 'runs/train'         # 保存目录
 NAME = 'coco_yolov8m'          # 项目名称
+
+# ========== 数据集路径配置 ==========
+DATA_ROOT = 'backend/dataset/coco'  # COCO数据集根目录
+TRAIN_PATH = os.path.join(DATA_ROOT, 'train2017')
+VAL_PATH = os.path.join(DATA_ROOT, 'val2017')
+ANNOTATIONS_PATH = os.path.join(DATA_ROOT, 'annotations')
+
+# COCO 80个类别名称
+COCO_NAMES = [
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
+    'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
+    'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra',
+    'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+    'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
+    'skateboard', 'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup',
+    'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange',
+    'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
+    'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse',
+    'remote', 'keyboard', 'cell phone', 'microwave', 'oven', 'toaster', 'sink',
+    'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier',
+    'toothbrush'
+]
+# ==========================================
+
+
+def create_data_yaml():
+    """创建 data.yaml 配置文件"""
+    data_yaml_path = 'data.yaml'
+    
+    # 构建 YAML 数据
+    data_config = {
+        'path': DATA_ROOT,
+        'train': 'train2017',
+        'val': 'val2017',
+        'nc': 80,
+        'names': COCO_NAMES,
+    }
+    
+    # 写入 YAML 文件
+    with open(data_yaml_path, 'w', encoding='utf-8') as f:
+        yaml.dump(data_config, f, allow_unicode=True, default_flow_style=False)
+    
+    print(f"✅ 已生成 data.yaml: {data_yaml_path}")
+    print(f"   数据集路径: {DATA_ROOT}")
+    print(f"   训练集: train2017")
+    print(f"   验证集: val2017")
+    return data_yaml_path
+
+
+def extract_coco_data():
+    """解压 COCO 数据集（如果尚未解压）"""
+    print("\n" + "="*70)
+    print("📦 检查 COCO 数据集...")
+    print("="*70)
+    
+    # 检查是否已解压
+    if os.path.exists(TRAIN_PATH) and os.path.exists(VAL_PATH):
+        # 检查是否有图片文件
+        train_images = [f for f in os.listdir(TRAIN_PATH) if f.endswith('.jpg')]
+        val_images = [f for f in os.listdir(VAL_PATH) if f.endswith('.jpg')]
+        
+        if len(train_images) > 0 and len(val_images) > 0:
+            print(f"✅ 数据集已解压")
+            print(f"   训练集: {TRAIN_PATH} ({len(train_images)} 张图片)")
+            print(f"   验证集: {VAL_PATH} ({len(val_images)} 张图片)")
+            return True
+        else:
+            print(f"⚠️  数据集目录存在但没有图片文件")
+            print(f"   请检查: {TRAIN_PATH} 和 {VAL_PATH}")
+            return False
+    
+    # 检查 zip 文件是否存在
+    train_zip = os.path.join(DATA_ROOT, 'train2017.zip')
+    val_zip = os.path.join(DATA_ROOT, 'val2017.zip')
+    
+    if not os.path.exists(train_zip) or not os.path.exists(val_zip):
+        print(f"❌ 错误: 找不到数据集压缩包!")
+        print(f"   请确保以下文件存在:")
+        print(f"   - {train_zip}")
+        print(f"   - {val_zip}")
+        return False
+    
+    print(f"🔄 开始解压数据集...")
+    print(f"   这可能需要几分钟时间...")
+    
+    try:
+        # 解压训练集
+        print(f"   📂 解压 train2017.zip...")
+        with zipfile.ZipFile(train_zip, 'r') as zip_ref:
+            zip_ref.extractall(DATA_ROOT)
+        
+        # 解压验证集
+        print(f"   📂 解压 val2017.zip...")
+        with zipfile.ZipFile(val_zip, 'r') as zip_ref:
+            zip_ref.extractall(DATA_ROOT)
+        
+        print(f"✅ 数据集解压完成!")
+        print(f"   训练集: {TRAIN_PATH}")
+        print(f"   验证集: {VAL_PATH}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ 解压失败: {e}")
+        return False
+
+
+def check_coco_labels():
+    """检查 COCO 标签是否已转换为 YOLO 格式"""
+    # COCO 数据集需要将 annotations 转换为 YOLO 格式的 txt 文件
+    
+    # 检查转换后的标签目录（在 labels 子目录下）
+    label_paths = [
+        os.path.join(DATA_ROOT, 'labels', 'train2017'),  # backend/dataset/coco/labels/train2017
+        os.path.join(TRAIN_PATH, 'labels'),              # backend/dataset/coco/train2017/labels
+        os.path.join(DATA_ROOT, 'train2017_labels'),     # backend/dataset/coco/train2017_labels
+    ]
+    
+    for label_dir in label_paths:
+        if os.path.exists(label_dir):
+            txt_files = [f for f in os.listdir(label_dir) if f.endswith('.txt')]
+            if len(txt_files) > 0:
+                print(f"✅ 找到 YOLO 格式标签: {label_dir} ({len(txt_files)} 个文件)")
+                return True
+    
+    print(f"\n⚠️  警告: 未找到 YOLO 格式的标签文件")
+    print(f"   COCO 数据集需要将 annotations 转换为 YOLO 格式")
+    print(f"\n   转换方法:")
+    print(f"   1. 使用 ultralytics 转换:")
+    print(f"      from ultralytics.data.converter import coco2yolo")
+    print(f"      coco2yolo('{ANNOTATIONS_PATH}/instances_train2017.json', '{TRAIN_PATH}', '{os.path.join(DATA_ROOT, 'labels', 'train2017')}')")
+    print(f"\n   2. 或者下载已转换的数据集")
+    print(f"   3. 或者使用 coco128.yaml 测试")
+    print(f"\n   ⚠️  没有标签文件，训练将失败！")
+    
+    return False
+
+
+def convert_coco_to_yolo():
+    """自动转换 COCO 标注为 YOLO 格式"""
+    try:
+        from ultralytics.data.converter import coco2yolo
+        
+        print("\n🔄 正在转换 COCO 标注为 YOLO 格式...")
+        print("   这可能需要几分钟时间...")
+        
+        # 转换训练集
+        train_json = os.path.join(ANNOTATIONS_PATH, 'instances_train2017.json')
+        train_label_dir = os.path.join(DATA_ROOT, 'labels', 'train2017')
+        
+        if os.path.exists(train_json):
+            os.makedirs(train_label_dir, exist_ok=True)
+            print(f"   📂 转换训练集: {train_json}")
+            coco2yolo(train_json, TRAIN_PATH, train_label_dir)
+            print(f"   ✅ 训练集转换完成: {train_label_dir}")
+        else:
+            print(f"   ❌ 找不到训练集标注文件: {train_json}")
+        
+        # 转换验证集
+        val_json = os.path.join(ANNOTATIONS_PATH, 'instances_val2017.json')
+        val_label_dir = os.path.join(DATA_ROOT, 'labels', 'val2017')
+        
+        if os.path.exists(val_json):
+            os.makedirs(val_label_dir, exist_ok=True)
+            print(f"   📂 转换验证集: {val_json}")
+            coco2yolo(val_json, VAL_PATH, val_label_dir)
+            print(f"   ✅ 验证集转换完成: {val_label_dir}")
+        else:
+            print(f"   ❌ 找不到验证集标注文件: {val_json}")
+        
+        print("\n✅ COCO 标注转换完成！")
+        return True
+        
+    except ImportError:
+        print("   ⚠️  未安装 ultralytics，无法自动转换")
+        print("   请运行: pip install ultralytics")
+        return False
+    except Exception as e:
+        print(f"   ❌ 转换失败: {e}")
+        return False
+
+
 # ==========================================
 
 
@@ -275,15 +458,53 @@ def check_gpu():
         print(f"  使用设备: GPU 0")
     else:
         print(f"  使用设备: CPU")
+        print(f"  ⚠️  如果使用 GPU，请安装 GPU 版本 PyTorch:")
+        print(f"  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
     print("="*70 + "\n")
 
 
 def train():
-    # 初始化自动调参器
-    auto_tuner = AutoTuner()
+    # 🔥 强制检查并重新配置 GPU
+    global DEVICE
+    if torch.cuda.is_available():
+        DEVICE = 0
+        print(f"✅ 强制使用 GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        DEVICE = 'cpu'
+        print("⚠️ 未检测到 GPU，使用 CPU")
     
     # 先检查 GPU
     check_gpu()
+    
+    # ===== 解压数据集 =====
+    if not extract_coco_data():
+        print("❌ 数据集准备失败，请检查文件路径")
+        return
+    
+    # ===== 检查标签 =====
+    has_labels = check_coco_labels()
+    
+    # 如果没有标签，尝试自动转换
+    if not has_labels:
+        print("\n🔄 尝试自动转换 COCO 标注...")
+        if convert_coco_to_yolo():
+            print("✅ COCO 标注转换完成")
+            # 重新检查标签
+            if check_coco_labels():
+                print("✅ 标签验证通过！")
+            else:
+                print("⚠️ 标签转换后仍无法验证，请检查")
+        else:
+            print("\n❌ 无法自动转换，请手动转换或使用其他数据集")
+            print("\n   临时解决方案: 使用 coco128.yaml 测试")
+            print("   data='coco128.yaml'  # YOLO 内置的小型数据集")
+            return
+    
+    # ===== 创建 data.yaml =====
+    data_yaml_path = create_data_yaml()
+    
+    # 初始化自动调参器
+    auto_tuner = AutoTuner()
     
     save_dir = os.path.join(PROJECT, NAME)
     has_checkpoint = os.path.exists(os.path.join(save_dir, 'weights', 'last.pt'))
@@ -341,16 +562,17 @@ def train():
     print(f"   图片尺寸: {IMGSZ}")
     print(f"   设备: {'GPU 0' if DEVICE == 0 else 'CPU'}")
     print(f"   自动调参: ✅ 已开启")
+    print(f"   数据配置: {data_yaml_path}")
     print(f"{'─'*70}\n")
     
-    # ✅ 应用自动调参建议
+    # ✅ 使用 data.yaml 文件路径
     results = model.train(
-        data=DATA_YAML,
+        data=data_yaml_path,           # ✅ 使用 YAML 文件路径
         epochs=EPOCHS_PER_RUN,
         imgsz=IMGSZ,
-        batch=train_params['batch'],          # ✅ 使用建议值
-        lr0=train_params['lr0'],              # ✅ 使用建议值
-        dropout=train_params['dropout'],      # ✅ 使用建议值
+        batch=train_params['batch'],
+        lr0=train_params['lr0'],
+        dropout=train_params['dropout'],
         resume=has_checkpoint,
         patience=PATIENCE,
         save_period=1,

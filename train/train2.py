@@ -20,7 +20,11 @@ import math
 
 # ========== 配置参数（按需修改） ==========
 MODEL_NAME = 'yolov8n.pt'
-DATASET_PATH = './datasets/defect_dataset'
+
+# 数据集路径 - 使用 defect_dataset 和其中的 data.yaml
+DATASET_PATH = '../backend/dataset/defect_dataset'
+DATA_YAML = '../backend/dataset/defect_dataset/data.yaml'  # 修正路径
+
 EPOCHS_PER_RUN = 8                     # 🔑 每次训练 8 轮（约 2-3 小时）
 IMGSZ = 640
 BATCH = 16
@@ -110,7 +114,70 @@ def check_gpu():
         print(f"  使用设备: GPU 0")
     else:
         print(f"  使用设备: CPU")
+        print(f"  💡 提示: 可安装GPU版本: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121")
     print("="*70 + "\n")
+
+
+def check_dataset_structure(dataset_path):
+    """检查数据集结构是否正确"""
+    print("\n" + "="*70)
+    print("📂 检查数据集结构")
+    print("="*70)
+    
+    # 检查 data.yaml
+    data_yaml = os.path.join(dataset_path, 'data.yaml')
+    if os.path.exists(data_yaml):
+        print(f"  ✅ data.yaml: {data_yaml}")
+    else:
+        print(f"  ❌ data.yaml 不存在: {data_yaml}")
+        return False
+    
+    # 检查 images 目录
+    images_dir = os.path.join(dataset_path, 'images')
+    if not os.path.exists(images_dir):
+        print(f"  ❌ images 目录不存在: {images_dir}")
+        return False
+    
+    # 检查 train 和 val
+    train_dir = os.path.join(images_dir, 'train')
+    val_dir = os.path.join(images_dir, 'val')
+    
+    if os.path.exists(train_dir):
+        train_count = len([f for f in os.listdir(train_dir) if f.endswith(('.jpg', '.jpeg', '.png'))])
+        print(f"  ✅ train: {train_count} 张图片")
+    else:
+        print(f"  ❌ train 目录不存在: {train_dir}")
+        return False
+    
+    if os.path.exists(val_dir):
+        val_count = len([f for f in os.listdir(val_dir) if f.endswith(('.jpg', '.jpeg', '.png'))])
+        print(f"  ✅ val: {val_count} 张图片")
+    else:
+        print(f"  ❌ val 目录不存在: {val_dir}")
+        return False
+    
+    # 检查 labels 目录
+    labels_dir = os.path.join(dataset_path, 'labels')
+    if os.path.exists(labels_dir):
+        train_labels = os.path.join(labels_dir, 'train')
+        val_labels = os.path.join(labels_dir, 'val')
+        
+        if os.path.exists(train_labels):
+            label_count = len([f for f in os.listdir(train_labels) if f.endswith('.txt')])
+            print(f"  ✅ labels/train: {label_count} 个标签")
+        else:
+            print(f"  ⚠️  labels/train 不存在（需要转换 COCO 标注）")
+        
+        if os.path.exists(val_labels):
+            label_count = len([f for f in os.listdir(val_labels) if f.endswith('.txt')])
+            print(f"  ✅ labels/val: {label_count} 个标签")
+        else:
+            print(f"  ⚠️  labels/val 不存在（需要转换 COCO 标注）")
+    else:
+        print(f"  ⚠️  labels 目录不存在（需要转换 COCO 标注）")
+    
+    print("\n✅ 数据集结构检查完成")
+    return True
 
 
 def get_training_status(save_dir):
@@ -222,8 +289,26 @@ def train():
     # ===== 检查数据集 =====
     if not os.path.exists(DATASET_PATH):
         print(f"\n❌ 数据集不存在: {DATASET_PATH}")
-        print("\n📥 请下载 COCO 格式缺陷数据集到该目录")
+        print("\n📥 请创建数据集目录并放入图片")
+        print("   目录结构应为:")
+        print(f"   {DATASET_PATH}/")
+        print("   ├── images/")
+        print("   │   ├── train/  (训练图片)")
+        print("   │   └── val/    (验证图片)")
+        print("   ├── labels/")
+        print("   │   ├── train/  (训练标签)")
+        print("   │   └── val/    (验证标签)")
+        print("   └── data.yaml   (数据集配置)")
         return
+    
+    # ===== 检查 data.yaml =====
+    if not os.path.exists(DATA_YAML):
+        print(f"\n❌ data.yaml 不存在: {DATA_YAML}")
+        print("   请创建 data.yaml 文件")
+        return
+    
+    # ===== 检查数据集结构 =====
+    check_dataset_structure(DATASET_PATH)
     
     # ===== 检查是否有之前的训练进度 =====
     if has_checkpoint:
@@ -271,10 +356,13 @@ def train():
     print(f"   图片尺寸: {IMGSZ}")
     print(f"   设备: {'GPU 0' if DEVICE == 0 else 'CPU'}")
     print(f"   自动调参: ✅ 已开启")
+    print(f"   数据集: {DATASET_PATH}")
+    print(f"   配置文件: {DATA_YAML}")
     print(f"{'─'*70}\n")
     
+    # 使用 data.yaml 进行训练
     results = model.train(
-        data=DATASET_PATH,
+        data=DATA_YAML,                  # 使用 data.yaml 配置文件
         epochs=EPOCHS_PER_RUN,
         imgsz=IMGSZ,
         batch=BATCH,

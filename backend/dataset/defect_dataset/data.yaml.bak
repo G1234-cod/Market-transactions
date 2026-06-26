@@ -1,0 +1,11 @@
+path: ./backend/dataset/defect_dataset
+train: images/train
+val: images/val
+
+nc: 5
+names:
+  0: scratch
+  1: dent
+  2: crack
+  3: stain
+  4: other
