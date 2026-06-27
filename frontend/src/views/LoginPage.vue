@@ -1,19 +1,19 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 pt-12 pb-8">
+  <div class="min-h-screen flex items-center justify-center px-4 pt-12 pb-8 bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800">
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
         <div class="relative inline-block">
-          <span class="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 via-primary-600 to-accent-500 inline-flex items-center justify-center text-white text-3xl font-bold shadow-xl shadow-primary-500/30 animate-float">二</span>
-          <div class="absolute -inset-4 bg-gradient-to-br from-primary-400/20 to-accent-400/20 rounded-3xl blur-xl -z-10"></div>
+          <div class="absolute -inset-4 bg-gradient-to-br from-primary-400/30 to-primary-600/30 rounded-3xl blur-2xl animate-pulse"></div>
+          <div class="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 inline-flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-primary-500/40">二</div>
         </div>
-        <h1 class="mt-6 text-2xl font-bold text-gray-800">智能二手商品发布助手</h1>
-        <p class="text-gray-400 text-sm mt-2">登录您的账号，开始发布二手商品</p>
+        <h1 class="mt-8 text-2xl font-bold text-white">智能二手商品发布助手</h1>
+        <p class="text-primary-300 text-sm mt-2">登录您的账号，开始发布二手商品</p>
       </div>
 
-      <div class="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 p-6 space-y-5">
+      <div class="bg-primary-800/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-primary-700/50 p-7 space-y-6">
         <form @submit.prevent="doLogin" aria-label="登录表单">
-          <div class="space-y-1.5">
-            <label for="username" class="block text-xs text-gray-500 font-medium uppercase tracking-wider">用户名</label>
+          <div class="space-y-2">
+            <label for="username" class="block text-xs text-primary-300 font-medium uppercase tracking-wider">用户名</label>
             <input 
               id="username"
               v-model="username" 
@@ -22,14 +22,14 @@
               autocomplete="username"
               name="username"
               spellcheck="false"
-              class="w-full px-4 py-3 bg-gray-50/80 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:outline-none transition-all"
+              class="w-full px-4 py-3 bg-primary-900/50 border border-primary-600 rounded-xl text-sm text-white placeholder:text-primary-400 focus:bg-primary-900 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/30 focus:outline-none transition-all"
               aria-required="true"
               :aria-invalid="error !== ''"
             />
           </div>
 
-          <div class="space-y-1.5">
-            <label for="password" class="block text-xs text-gray-500 font-medium uppercase tracking-wider">密码</label>
+          <div class="space-y-2">
+            <label for="password" class="block text-xs text-primary-300 font-medium uppercase tracking-wider">密码</label>
             <input 
               id="password"
               v-model="password" 
@@ -38,26 +38,26 @@
               maxlength="50"
               autocomplete="current-password"
               name="password"
-              class="w-full px-4 py-3 bg-gray-50/80 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder:text-gray-400 focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:outline-none transition-all"
+              class="w-full px-4 py-3 bg-primary-900/50 border border-primary-600 rounded-xl text-sm text-white placeholder:text-primary-400 focus:bg-primary-900 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/30 focus:outline-none transition-all"
               aria-required="true"
               :aria-invalid="error !== ''"
             />
           </div>
 
-          <div v-if="error" class="text-xs text-red-500 text-center mt-2" role="alert" aria-live="polite">{{ error }}</div>
+          <div v-if="error" class="text-xs text-red-400 text-center mt-3" role="alert" aria-live="polite">{{ error }}</div>
 
           <button 
             type="submit"
-            class="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-primary-500 via-primary-600 to-accent-500 hover:from-primary-600 hover:via-primary-700 hover:to-accent-600 shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
+            class="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-primary-500 via-primary-400 to-primary-300 hover:from-primary-400 hover:via-primary-300 hover:to-primary-200 shadow-lg shadow-primary-500/40 hover:shadow-xl hover:shadow-primary-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
             :disabled="!canSubmit || loading"
           >
-            <span v-if="loading" class="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+            <span v-if="loading" class="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
             {{ loading ? '登录中…' : '登录' }}
           </button>
         </form>
 
-        <p class="text-center text-xs text-gray-400 pt-2">
-          还没有账号？<router-link to="/register" class="text-primary-600 hover:text-primary-700 hover:underline transition-colors">注册新账号</router-link>
+        <p class="text-center text-xs text-primary-400 pt-3">
+          还没有账号？<router-link to="/register" class="text-primary-200 hover:text-white hover:underline transition-colors">注册新账号</router-link>
         </p>
       </div>
     </div>

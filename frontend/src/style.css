@@ -1,41 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --color-primary-50: #eff6ff;
-    --color-primary-100: #dbeafe;
-    --color-primary-200: #bfdbfe;
-    --color-primary-300: #93c5fd;
-    --color-primary-400: #60a5fa;
-    --color-primary-500: #3b82f6;
-    --color-primary-600: #2563eb;
-    --color-primary-700: #1d4ed8;
-    --color-primary-800: #1e40af;
-    --color-primary-900: #1e3a8a;
+    --color-primary-50: #EFF6FF;
+    --color-primary-100: #DBEAFE;
+    --color-primary-200: #BFDBFE;
+    --color-primary-300: #93C5FD;
+    --color-primary-400: #60A5FA;
+    --color-primary-500: #3B82F6;
+    --color-primary-600: #2563EB;
+    --color-primary-700: #1D4ED8;
+    --color-primary-800: #1E40AF;
+    --color-primary-900: #1E3A8A;
+    --color-primary-950: #172554;
 
-    --color-accent-50: #fdf4ff;
-    --color-accent-100: #fae8ff;
-    --color-accent-200: #f5d0fe;
-    --color-accent-300: #f0abfc;
-    --color-accent-400: #e879f9;
-    --color-accent-500: #d946ef;
-    --color-accent-600: #c026d3;
+    --color-success-50: #F0FDF4;
+    --color-success-100: #DcfCE7;
+    --color-success-500: #22C55E;
+    --color-success-600: #16A34A;
+    --color-success-700: #15803D;
 
     --color-surface: #ffffff;
-    --color-surface-secondary: #f8fafc;
-    --color-surface-tertiary: #f1f5f9;
+    --color-surface-secondary: #F8FAFC;
+    --color-surface-tertiary: #F1F5F9;
 
-    --color-text-primary: #1e293b;
-    --color-text-secondary: #64748b;
-    --color-text-muted: #94a3b8;
+    --color-text-primary: #1E3A8A;
+    --color-text-secondary: #334155;
+    --color-text-muted: #64748B;
 
-    --color-border: #e2e8f0;
-    --color-border-light: #f1f5f9;
+    --color-border: #E2E8F0;
+    --color-border-light: #F1F5F9;
 
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
 
     --radius-sm: 0.5rem;
     --radius-md: 0.75rem;
@@ -44,7 +45,7 @@
     --radius-2xl: 1.5rem;
 
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   }
@@ -56,9 +57,10 @@
 
   body {
     font-family: var(--font-sans);
-    background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 50%, #fdf4ff 100%);
+    background: linear-gradient(135deg, #F1F5F9 0%, #EFF6FF 40%, #DBEAFE 100%);
     color: var(--color-text-primary);
     line-height: 1.6;
+    min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -70,23 +72,31 @@
 
 @layer components {
   .glass-card {
-    @apply bg-white/80 backdrop-blur-md border border-white/50 shadow-lg;
+    @apply bg-white/90 backdrop-blur-md border border-white/60 shadow-lg;
   }
 
   .gradient-primary {
-    @apply bg-gradient-to-r from-primary-500 via-primary-600 to-accent-500;
+    @apply bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400;
+  }
+
+  .gradient-success {
+    @apply bg-gradient-to-r from-success-600 via-success-500 to-success-400;
   }
 
   .gradient-text {
-    @apply bg-gradient-to-r from-primary-600 via-accent-500 to-primary-700 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary-700 via-primary-600 to-primary-500 bg-clip-text text-transparent;
   }
 
   .btn-primary {
-    @apply px-6 py-2.5 rounded-xl font-semibold text-white gradient-primary shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0;
+    @apply px-6 py-2.5 rounded-xl font-semibold text-white gradient-primary shadow-lg shadow-primary-600/30 hover:shadow-xl hover:shadow-primary-600/40 hover:from-primary-700 hover:via-primary-600 hover:to-primary-500 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer;
+  }
+
+  .btn-success {
+    @apply px-6 py-2.5 rounded-xl font-semibold text-white gradient-success shadow-lg shadow-success-600/30 hover:shadow-xl hover:shadow-success-600/40 hover:from-success-700 hover:via-success-600 hover:to-success-500 transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer;
   }
 
   .btn-secondary {
-    @apply px-6 py-2.5 rounded-xl font-semibold text-text-secondary bg-surface-secondary border border-border hover:bg-surface-tertiary hover:text-text-primary transition-all duration-200;
+    @apply px-6 py-2.5 rounded-xl font-semibold text-text-secondary bg-surface-secondary border border-border hover:bg-surface-tertiary hover:text-text-primary hover:border-primary-200 transition-all duration-200 cursor-pointer;
   }
 
   .input-field {
@@ -104,6 +114,10 @@
   .animate-gradient {
     background-size: 200% 200%;
     animation: gradient-shift 8s ease infinite;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer;
   }
 }
 
@@ -133,10 +147,10 @@
   }
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #F1F5F9; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
 .page-enter-active,
 .page-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
