@@ -280,6 +280,35 @@ async def get_item_by_id(item_id: int) -> dict | None:
             return await cur.fetchone()
 
 
+async def get_items_by_ids(item_ids: list[int]) -> dict[int, dict]:
+    """
+    批量获取商品信息（避免 N+1 查询）
+
+    Args:
+        item_ids: 商品ID列表
+
+    Returns:
+        dict[int, dict]: {item_id: item_data} 映射
+    """
+    if not item_ids:
+        return {}
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            placeholders = ','.join(['%s'] * len(item_ids))
+            await cur.execute(
+                f"""SELECT id, user_id, original_image_url, bg_removed_url, annotated_url,
+                          ai_generated_title, ai_generated_desc, suggested_price,
+                          category, brand, model, `condition`, status,
+                          views, likes, defect_count, defect_data, created_at
+                   FROM published_items WHERE id IN ({placeholders})""",
+                item_ids
+            )
+            rows = await cur.fetchall()
+            return {row['id']: row for row in rows}
+
+
 # ============================================================
 # views/likes 更新操作
 # ============================================================
@@ -419,18 +448,23 @@ async def get_hard_cases(
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            # 验证排序字段
-            valid_sort_fields = {"created_at", "retry_count", "confidence", "id"}
-            if sort_by not in valid_sort_fields:
-                sort_by = "created_at"
-            
+            # ✅ 排序字段白名单映射 — 将用户输入映射到安全的列名
+            # 不允许直接将 sort_by 插入 SQL，而是通过 dict 间接查找
+            _SORT_COLUMNS = {
+                "created_at": "created_at",
+                "retry_count": "retry_count",
+                "confidence": "confidence",
+                "id": "id",
+            }
+            sort_column = _SORT_COLUMNS.get(sort_by, "created_at")
+
             await cur.execute(
-                f"""SELECT id, image_url, wrong_label, correct_label, user_id, 
-                          item_id, model_version, confidence, retry_count, is_fixed, 
+                f"""SELECT id, image_url, wrong_label, correct_label, user_id,
+                          item_id, model_version, confidence, retry_count, is_fixed,
                           created_at, updated_at, fixed_at
-                   FROM hard_cases 
+                   FROM hard_cases
                    WHERE is_fixed = %s
-                   ORDER BY {sort_by} DESC
+                   ORDER BY {sort_column} DESC
                    LIMIT %s OFFSET %s""",
                 (1 if is_fixed else 0, limit, offset)
             )

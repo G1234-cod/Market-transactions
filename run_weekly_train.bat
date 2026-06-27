@@ -4,13 +4,18 @@ echo 每周自动模型训练
 echo 开始时间: %date% %time%
 echo ========================================
 
+<<<<<<< HEAD
 cd /d E:\Market-transactions
+=======
+cd /d %~dp0
+>>>>>>> feature/NXF-LGTM
 
 echo 激活虚拟环境...
-call venv\Scripts\activate
+call .venv\Scripts\activate
 
 echo 开始训练...
-python scripts/weekly_train.py
+cd backend
+python weekly_train.py
 
 echo ========================================
 echo 训练完成！

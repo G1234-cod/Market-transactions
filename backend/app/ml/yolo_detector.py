@@ -72,9 +72,11 @@ class YOLODetector:
             return YOLO(str(default_path))
         
         # 4. 回退到预训练模型
-        logger.warning("⚠️ 未找到模型文件，使用预训练模型 yolov8n.pt")
-        self.model_path = "yolov8n.pt"
-        return YOLO('yolov8n.pt')
+        from app.config import settings as _settings
+        pretrained = _settings.YOLO_PRETRAINED_PATH
+        logger.warning(f"⚠️ 未找到模型文件，使用预训练模型 {pretrained}")
+        self.model_path = pretrained
+        return YOLO(pretrained)
     
     def detect(
         self,

@@ -26,21 +26,25 @@ class DefectDetector:
     """
     
     # ==================== 瑕疵类别映射 ====================
-    # ✅ 统一为 5 类（与训练数据 data.yaml 一致）
+    # ✅ Kaputt 7 类缺陷（与 trainzui/train2 训练数据一致）
     DEFECT_CLASSES = {
-        0: 'scratch',      # 划痕
-        1: 'dent',         # 磕碰
-        2: 'stain',        # 污渍
-        3: 'crack',        # 裂痕
-        4: 'other',        # 其他（掉漆、变形等）
+        0: 'penetration',       # 穿透
+        1: 'deformation',       # 变形
+        2: 'actuation',         # 功能故障
+        3: 'deconstruction',    # 结构损坏
+        4: 'spillage',          # 溢漏
+        5: 'superficial',       # 表面瑕疵
+        6: 'missing_unit',      # 部件缺失
     }
-    
+
     DEFECT_NAMES_CN = {
-        'scratch': '划痕',
-        'dent': '磕碰',
-        'stain': '污渍',
-        'crack': '裂痕',
-        'other': '其他'
+        'penetration': '穿透',
+        'deformation': '变形',
+        'actuation': '功能故障',
+        'deconstruction': '结构损坏',
+        'spillage': '溢漏',
+        'superficial': '表面瑕疵',
+        'missing_unit': '部件缺失',
     }
     
     # ==================== 程度等级配置 ====================
@@ -161,49 +165,59 @@ class DefectDetector:
     ) -> str:
         """
         根据瑕疵类型、面积占比、置信度判断程度等级
-        
+
+        Kaputt 7 类 → 严重程度映射：
+          penetration    穿透      → 重度
+          deformation    变形      → 面积大→重度，否则中度
+          actuation      功能故障  → 重度
+          deconstruction 结构损坏  → 重度
+          spillage       溢漏      → 面积大→中度，否则轻度
+          superficial    表面瑕疵  → 轻微
+          missing_unit   部件缺失  → 重度
+
         Args:
-            defect_type: 瑕疵类型 (scratch/dent/stain/crack/other)
+            defect_type: 瑕疵类型
             area_ratio: 瑕疵面积占图片比例
             confidence: 检测置信度
             bbox: 边界框 [x1, y1, x2, y2] (float)
-            
+
         Returns:
             str: severe / moderate / minor / slight
         """
-        # 裂痕 → 重度
-        if defect_type == 'crack':
+        # 穿透 → 重度
+        if defect_type == 'penetration':
             return 'severe'
-        
-        # 磕碰：面积大 → 中度，面积小 → 轻度
-        if defect_type == 'dent':
+
+        # 变形：面积大 → 重度，否则中度
+        if defect_type == 'deformation':
+            if area_ratio > 0.002:
+                return 'severe'
+            return 'moderate'
+
+        # 功能故障 → 重度
+        if defect_type == 'actuation':
+            return 'severe'
+
+        # 结构损坏 → 重度
+        if defect_type == 'deconstruction':
+            return 'severe'
+
+        # 溢漏：面积大 → 中度，否则轻度
+        if defect_type == 'spillage':
             if area_ratio > 0.001:
                 return 'moderate'
             return 'minor'
-        
-        # 划痕：长且面积大 → 中度，否则轻度
-        if defect_type == 'scratch':
-            width = bbox[2] - bbox[0]
-            height = bbox[3] - bbox[1]
-            aspect_ratio = max(width, height) / (min(width, height) + 1)
-            if aspect_ratio > 5 and area_ratio > 0.0005:
-                return 'moderate'
-            if area_ratio > 0.0005:
-                return 'moderate'
-            return 'minor'
-        
-        # 污渍 → 轻微
-        if defect_type == 'stain':
+
+        # 表面瑕疵 → 轻微
+        if defect_type == 'superficial':
             if area_ratio > 0.001:
                 return 'minor'
             return 'slight'
-        
-        # 其他（掉漆、变形等）→ 中度
-        if defect_type == 'other':
-            if area_ratio > 0.001:
-                return 'moderate'
-            return 'minor'
-        
+
+        # 部件缺失 → 重度
+        if defect_type == 'missing_unit':
+            return 'severe'
+
         return 'minor'
     
     def _draw_shape(

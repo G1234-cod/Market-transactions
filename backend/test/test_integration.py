@@ -21,15 +21,17 @@ class TestIntegration:
             "password": "test123"
         })
         assert login_resp.status_code == 200
-        user_id = login_resp.json()["id"]
+        login_data = login_resp.json()
+        token = login_data.get("token") or login_data.get("access_token")
+        auth_headers = {"Authorization": f"Bearer {token}"}
 
         # 3. 上传图片识别
         files = {"image": ("test.jpg", sample_image, "image/jpeg")}
-        extract_resp = client.post("/api/v1/extract", files=files, data={"user_id": user_id})
+        extract_resp = client.post("/api/v1/extract", files=files, headers=auth_headers)
         assert extract_resp.status_code == 200
 
         # 4. YOLO 检测
-        detect_resp = client.post("/api/v1/yolo/detect", files=files)
+        detect_resp = client.post("/api/v1/yolo/detect", files=files, headers=auth_headers)
         assert detect_resp.status_code == 200
         assert detect_resp.json()["success"] is True
 

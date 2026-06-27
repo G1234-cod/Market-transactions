@@ -29,8 +29,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ========== 配置 ==========
-ERROR_DATA_DIR = Path("data/error_data")
-MODEL_PATH = Path("app/ml/models/best.pt")
+ERROR_DATA_DIR = Path(settings.ERROR_DATA_DIR)
+MODEL_PATH = Path(settings.YOLO_MODEL_PATH)
 OUTPUT_DIR = Path(f"runs/train/weekly_{datetime.now().strftime('%Y%m%d')}")
 TRAIN_RATIO = 0.8
 MIN_SAMPLES = 10
@@ -38,9 +38,9 @@ EPOCHS = 20
 BATCH_SIZE = 8
 IMAGE_SIZE = 640
 
-# ✅ 缺陷检测类别（与 dataset/data.yaml 一致）
-DEFECT_CLASSES = ['scratch', 'dent', 'crack', 'stain', 'other']
-DEFECT_CLASSES_CN = ['划痕', '磕碰', '裂痕', '污渍', '其他']
+# ✅ 缺陷检测类别（与 trainzui/train2 训练数据 Kaputt 7 类一致）
+DEFECT_CLASSES = ['penetration', 'deformation', 'actuation', 'deconstruction', 'spillage', 'superficial', 'missing_unit']
+DEFECT_CLASSES_CN = ['穿透', '变形', '功能故障', '结构损坏', '溢漏', '表面瑕疵', '部件缺失']
 
 
 def parse_label_file(label_path: Path) -> tuple:
@@ -85,14 +85,21 @@ def get_class_id(class_name: str) -> int:
     if not class_name:
         return 0
     
-    # 中文到英文映射（仅瑕疵类型）
+    # 中文到英文映射（Kaputt 7 类）
     cn_to_en = {
-        '划痕': 'scratch',
-        '磕碰': 'dent',
-        '裂痕': 'crack',
-        '污渍': 'stain',
-        '掉漆': 'scratch',
-        '其他': 'other',
+        '穿透': 'penetration',
+        '变形': 'deformation',
+        '功能故障': 'actuation',
+        '结构损坏': 'deconstruction',
+        '溢漏': 'spillage',
+        '表面瑕疵': 'superficial',
+        '部件缺失': 'missing_unit',
+        '掉漆': 'superficial',
+        '其他': 'superficial',
+        '划痕': 'superficial',
+        '磕碰': 'deformation',
+        '裂痕': 'penetration',
+        '污渍': 'spillage',
     }
     
     # 1. 直接匹配缺陷类别
@@ -112,9 +119,9 @@ def get_class_id(class_name: str) -> int:
         if class_name_lower in name.lower() or name.lower() in class_name_lower:
             return idx
     
-    # 4. 如果都没匹配到，默认返回 0 (scratch)
-    logger.warning(f"⚠️ 未找到类别 '{class_name}' 的映射，使用默认类别 scratch")
-    return 0
+    # 4. 如果都没匹配到，默认返回 5 (superficial)
+    logger.warning(f"⚠️ 未找到类别 '{class_name}' 的映射，使用默认类别 superficial (id=5)。请考虑更新 cn_to_en 映射表。")
+    return 5
 
 
 async def get_error_cases_from_db(limit: int = 500) -> List[Dict[str, Any]]:
@@ -177,47 +184,54 @@ async def get_error_cases_from_local(limit: int = 500) -> List[Dict[str, Any]]:
     return cases
 
 
-def download_image(image_url: str, save_path: Path) -> bool:
+def download_image(image_url: str, save_path: Path, max_retries: int = 3) -> bool:
     """
-    下载图片
-    
+    下载图片（带重试机制）
+
     Args:
         image_url: 图片URL或本地路径
         save_path: 保存路径
-        
+        max_retries: 最大重试次数
+
     Returns:
         bool: 是否成功
     """
-    try:
-        # 如果是本地路径
-        if not image_url.startswith("http"):
-            # 处理相对路径
-            if image_url.startswith("/static/"):
-                image_url = f"{settings.BASE_URL}{image_url}"
-            elif Path(image_url).exists():
-                shutil.copy(image_url, save_path)
-                return True
-            
-            # 尝试作为相对路径
-            local_path = Path(image_url)
-            if local_path.exists():
-                shutil.copy(local_path, save_path)
-                return True
-        
-        # HTTP 下载
-        import requests
-        response = requests.get(image_url, timeout=30)
-        if response.status_code == 200:
-            with open(save_path, 'wb') as f:
-                f.write(response.content)
+    import time as _time
+
+    # 本地路径处理 — 无需重试
+    if not image_url.startswith("http"):
+        if image_url.startswith(f"{settings.STATIC_PREFIX}/"):
+            image_url = f"{settings.BASE_URL}{image_url}"
+        local_path = Path(image_url)
+        if local_path.exists():
+            shutil.copy(local_path, save_path)
             return True
-        
-        logger.warning(f"⚠️ 下载失败: {image_url} (HTTP {response.status_code})")
         return False
-        
-    except Exception as e:
-        logger.warning(f"⚠️ 下载异常: {image_url}, {e}")
-        return False
+
+    # HTTP 下载 — 带重试
+    import requests
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.get(image_url, timeout=30)
+            if response.status_code == 200:
+                with open(save_path, 'wb') as f:
+                    f.write(response.content)
+                if attempt > 0:
+                    logger.info(f"✅ 图片下载成功 (重试 {attempt} 次): {image_url}")
+                return True
+            logger.warning(f"⚠️ 下载失败 (尝试 {attempt+1}/{max_retries+1}): "
+                           f"{image_url} (HTTP {response.status_code})")
+        except Exception as e:
+            logger.warning(f"⚠️ 下载异常 (尝试 {attempt+1}/{max_retries+1}): "
+                           f"{image_url}, {e}")
+
+        if attempt < max_retries:
+            wait = 2 ** attempt  # 指数退避: 1s, 2s, 4s
+            logger.info(f"   等待 {wait}s 后重试...")
+            _time.sleep(wait)
+
+    logger.error(f"❌ 图片下载最终失败 (重试 {max_retries} 次): {image_url}")
+    return False
 
 
 def generate_yolo_label(
@@ -414,9 +428,8 @@ def run_training(data_yaml: Path, output_dir: Path) -> bool:
             device = 'cpu'
         
         # ✅ 使用基础模型，而不是从已有模型加载（避免类别数不匹配）
-        # 如果存在模型但类别数不匹配，使用预训练模型
-        model = YOLO('yolov8n.pt')
-        logger.info("✅ 使用预训练模型 yolov8n.pt 作为基础")
+        model = YOLO(settings.YOLO_PRETRAINED_PATH)
+        logger.info(f"✅ 使用预训练模型 {settings.YOLO_PRETRAINED_PATH} 作为基础")
         
         # 训练
         logger.info("🚀 开始微调训练...")
@@ -478,6 +491,12 @@ async def main_async():
     logger.info("=" * 60)
     logger.info(f"🚀 每周自动训练 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
+
+    # ✅ 确保必要的目录存在
+    for d in [ERROR_DATA_DIR, Path(settings.BASE_DIR / "runs" / "train"),
+              Path(settings.BASE_DIR / "datasets"), settings.MODELS_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
+    logger.info("✅ 训练目录已就绪")
     
     # 1. ✅ 使用 await 获取错误数据
     cases = await get_error_cases_from_db(limit=500)

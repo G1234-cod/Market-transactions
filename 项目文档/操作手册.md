@@ -1,0 +1,163 @@
+# 📦 给兄弟的完整操作手册（具体步骤）
+
+---
+
+## 📝 第一步：配置 .env
+
+复制 `.env.example` 并填写配置。在 Trae 终端运行（根目录下）：
+
+```cmd
+cp .env.example .env
+```
+
+---
+
+## 🗄️ 第二步：MySQL 服务管理
+
+### 查看 MySQL 服务名称（电脑终端管理员运行）
+
+```cmd
+sc query | findstr MySQL
+```
+
+### 启动服务（根据实际服务名）
+
+```cmd
+net start MySQL80
+```
+
+---
+
+## 🗄️ 第三步：创建数据库
+
+### 4.1 登录 MySQL
+
+在 Trae 终端执行（根目录下）：
+
+```cmd
+mysql -u root -p
+```
+
+输入刚才设置的 root 密码。
+
+### 4.2 执行建表脚本
+
+在你执行后端第一步的终端会出现 mysql，然后输入：
+
+```sql
+SOURCE D:\Market-train\schema.sql;
+```
+
+### 4.3 验证表是否创建成功
+
+mysql 继续输入：
+
+```sql
+SHOW TABLES;
+```
+
+应该看到 8 张表：
+
+```
++-------------------------------+
+| ai_audit_logs                 |
+| feature_vectors               |
+| hard_cases                    |
+| item_likes                    |
+| market_prices                 |
+| price_history                 |
+| published_items               |
+| users                         |
++-------------------------------+
+```
+
+---
+
+## 📦 第四步：创建虚拟环境
+
+在 Trae 终端运行（根目录下）：
+
+```cmd
+D:
+python -m venv venv
+venv\Scripts\activate
+```
+
+执行后，命令行前缀出现 `(venv)` 即表示成功。
+
+---
+
+## ⚙️ 第五步：自动安装 PyTorch 及依赖
+
+先进入环境依赖项目，运行终端或者右键，**一定要进入环境依赖项目**。
+
+在 Trae 终端运行：
+
+```cmd
+cd 环境依赖
+pip install -r requirements.txt
+python torchzidong.py
+```
+
+这个脚本会自动：
+- 检测 CUDA 版本
+- 安装匹配的 PyTorch（含 GPU 支持）
+- 安装 `requirements.txt` 中的其他依赖
+- 验证 GPU 是否可用
+
+> **如果 pip 下载太慢**，可临时使用清华源（脚本已内置回退逻辑）。
+
+---
+
+## 🔧 第六步：验证 GPU（可选但推荐）
+
+在虚拟环境中运行（Trae 终端）：
+
+```cmd
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+显示 `True` 说明 GPU 配置成功。显示 `False` 则使用 CPU 训练（速度较慢）。
+
+---
+
+## 🐳 第七步：启动 Qdrant 向量数据库
+
+打开 Docker，在 Trae 终端运行（根目录下）：
+
+```cmd
+docker run -d -p 6333:6333 -v D:/Market-train/backend/data/qdrant:/qdrant/storage qdrant/qdrant:latest
+```
+
+---
+
+## 🔍 第八步：以图搜图索引
+
+在 Trae 终端运行：
+
+```cmd
+# 进入 backend 目录
+cd backend
+
+# 激活虚拟环境
+..\.venv\Scripts\activate
+
+# 首次运行批量索引（把已有商品入库）
+python scripts/index_items.py --all
+```
+
+---
+
+## 🚀 第九步：启动后端服务
+
+在 Trae 终端运行：
+
+```cmd
+# 进入后端目录
+cd backend
+
+# 启动服务
+uvicorn main:app --reload
+```
+
+> 测试根据个人端口进入测试。

@@ -1,0 +1,18 @@
+# 瑕疵检测数据集配置 — Kaputt 7 类
+# 由 convert_kaputt.py 转换后，自动在 photo/ 生成最终 data.yaml
+# 这里的配置作为模板/参考
+
+path: .
+train: images/train
+val: images/val
+
+# 7 类缺陷
+nc: 7
+names:
+  0: penetration
+  1: deformation
+  2: actuation
+  3: deconstruction
+  4: spillage
+  5: superficial
+  6: missing_unit

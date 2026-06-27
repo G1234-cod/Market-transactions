@@ -22,14 +22,19 @@ class QwenVLClient(BaseLLMClient):
     def __init__(self):
         self._api_key = settings.DASHSCOPE_API_KEY
         self._model = settings.QWEN_VL_MODEL
+        self._client = None  # ✅ 延迟初始化，复用连接
 
     # ---- 使用 OpenAI 兼容接口 ----
     def _openai_client(self):
-        from openai import AsyncOpenAI
-        return AsyncOpenAI(
-            api_key=self._api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        )
+        """✅ 复用客户端实例，避免每次请求创建新连接"""
+        if self._client is None:
+            from openai import AsyncOpenAI
+            self._client = AsyncOpenAI(
+                api_key=self._api_key,
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                timeout=60.0,  # ✅ 设置超时
+            )
+        return self._client
 
     async def chat(self, messages: list[dict], **kwargs) -> str:
         """

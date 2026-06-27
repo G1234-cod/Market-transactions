@@ -12,6 +12,7 @@ class DeepSeekClient(BaseLLMClient):
         self._client = AsyncOpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
             base_url=settings.DEEPSEEK_BASE_URL,
+            timeout=60.0,  # ✅ 设置超时，防止请求无限挂起
         )
         self._model = settings.DEEPSEEK_MODEL
 

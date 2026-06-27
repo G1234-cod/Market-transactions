@@ -1,16 +1,17 @@
 """POST /api/v1/login + POST /api/v1/register"""
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 
 from app.models.schemas import LoginRequest, RegisterRequest, LoginResponse, RegisterResponse
 from app.db import crud
 from app.auth.jwt_handler import create_access_token
+from app.middleware.rate_limit import create_rate_limit
 
 router = APIRouter(tags=["用户"])
 
 
 @router.post("/register", response_model=RegisterResponse)
-async def register(payload: RegisterRequest):
-    """注册新用户"""
+async def register(payload: RegisterRequest, rate: None = Depends(create_rate_limit(5, 60))):
+    """注册新用户（速率限制: 5次/分钟）"""
     username = payload.username.strip()
     password = payload.password
     
@@ -32,8 +33,8 @@ async def register(payload: RegisterRequest):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(payload: LoginRequest):
-    """用户名 + 密码登录，返回 JWT Token"""
+async def login(payload: LoginRequest, rate: None = Depends(create_rate_limit(10, 60))):
+    """用户名 + 密码登录，返回 JWT Token（速率限制: 10次/分钟，防暴力破解）"""
     username = payload.username.strip()
     password = payload.password
 

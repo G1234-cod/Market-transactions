@@ -13,6 +13,8 @@ from app.ml.qdrant_client import get_qdrant
 from app.db import crud
 from app.config import get_static_url, get_base_url
 from app.dependencies import get_current_user, get_current_user_optional
+from app.utils.file_validator import validate_upload_file
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ def build_image_url(image_url: str) -> str:
         return ""
     if image_url.startswith("http://") or image_url.startswith("https://"):
         return image_url
-    if image_url.startswith("/static/"):
+    if image_url.startswith(f"{settings.STATIC_PREFIX}/"):
         return f"{get_base_url()}{image_url}"
     return get_static_url(image_url)
 
@@ -48,7 +50,20 @@ async def search_by_image(
         top_k: 返回结果数量 (1-100)
     """
     try:
-        content = await image.read()
+        # ✅ 文件上传校验（修复：之前缺少验证）
+        try:
+            content, safe_filename = await validate_upload_file(
+                file=image,
+                max_size=settings.MAX_UPLOAD_SIZE,
+                check_content=True
+            )
+        except HTTPException:
+            await image.seek(0)
+            raise
+        except Exception as e:
+            await image.seek(0)
+            raise HTTPException(status_code=400, detail=f"文件验证失败: {str(e)}")
+
         pil_image = Image.open(io.BytesIO(content))
 
         extractor = get_extractor()
@@ -61,13 +76,16 @@ async def search_by_image(
             filter_category=filter_category if filter_category else None,
         )
 
+        # ✅ 批量查询商品详情（避免 N+1 查询）
+        result_ids = [r["id"] for r in results]
+        items_map = await crud.get_items_by_ids(result_ids)
+
         items = []
         for r in results:
             item_id = r["id"]
             score = r["score"]
-            payload = r["payload"] or {}
+            item = items_map.get(item_id)
 
-            item = await crud.get_item_by_id(item_id)
             if item and item.get('status') == 'published':
                 img_url = build_image_url(item.get("original_image_url", ""))
                 items.append({
@@ -116,14 +134,16 @@ async def search_by_text(
             filter_category=category if category else None,
         )
 
-        # 3. 查询商品详情
+        # 3. 查询商品详情（批量查询，避免 N+1）
         items = []
+        result_ids = [r["id"] for r in results]
+        items_map = await crud.get_items_by_ids(result_ids)
+
         for r in results:
             item_id = r["id"]
             score = r["score"]
-            payload = r["payload"] or {}
+            item = items_map.get(item_id)
 
-            item = await crud.get_item_by_id(item_id)
             if item and item.get('status') == 'published':
                 img_url = build_image_url(item.get("original_image_url", ""))
                 items.append({

@@ -69,7 +69,7 @@ CREATE TABLE `published_items` (
   `brand`              VARCHAR(50)   NULL     DEFAULT NULL   COMMENT '品牌（Apple/华为/小米等）',
   `model`              VARCHAR(100)  NULL     DEFAULT NULL   COMMENT '型号（iPhone 13/Mate 60等）',
   `condition`          VARCHAR(200)  NULL     DEFAULT NULL   COMMENT '成色描述',
-  `status`             VARCHAR(20)   NOT NULL DEFAULT 'draft' COMMENT '状态: draft/published/hidden/sold/deleted',
+  `status`             VARCHAR(20)   NOT NULL DEFAULT 'draft' COMMENT '状态: draft/published/delisted',
   `views`              INT           NOT NULL DEFAULT 0      COMMENT '浏览次数',
   `likes`              INT           NOT NULL DEFAULT 0      COMMENT '点赞数',
   `retry_count`        INT           NOT NULL DEFAULT 0      COMMENT '重试次数',
