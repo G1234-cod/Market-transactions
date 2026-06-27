@@ -9,7 +9,7 @@ from app.models.schemas import HistoryItem, GenerateSaveRequest
 from app.db import crud
 from app.ml.clip_extractor import get_extractor
 from app.ml.qdrant_client import get_qdrant
-from app.config import get_static_url, get_base_url, build_full_url
+from app.config import get_static_url, get_base_url, settings
 from app.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def build_image_url(image_url: str) -> str:
     if image_url.startswith("http://") or image_url.startswith("https://"):
         return image_url
     
-    if image_url.startswith("/static/"):
+    if image_url.startswith(f"{settings.STATIC_PREFIX}/"):
         return f"{get_base_url()}{image_url}"
     
     return get_static_url(image_url)

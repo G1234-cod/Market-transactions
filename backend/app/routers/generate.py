@@ -10,6 +10,7 @@ from app.models.schemas import GenerateRequest
 from app.services import text_service, audit_service
 from app.config import settings
 from app.dependencies import get_current_user
+from app.middleware.rate_limit import create_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ def sse_event(data: dict) -> str:
 @router.post("/generate")
 async def generate(
     payload: GenerateRequest,
-    user_id: int = Depends(get_current_user)  # ✅ JWT 认证
+    user_id: int = Depends(get_current_user),  # ✅ JWT 认证
+    rate: None = Depends(create_rate_limit(20, 60)),  # DeepSeek: 20次/分钟
 ):
     """SSE 流式生成商品带货文案
 
@@ -75,12 +77,14 @@ async def generate(
                 "message": "文案生成完成"
             })
 
-            # 4. 记录成功审计日志
+            # 4. 记录成功审计日志（截断过长内容以保护隐私）
+            full_response = "".join(full_text)
+            logged_response = full_response[:2000] + ("...(truncated)" if len(full_response) > 2000 else "")
             await audit_service.log_generate_call(
                 user_id=user_id,
                 model_name=settings.DEEPSEEK_MODEL,
                 input_summary=f"{payload.brand} {payload.model}",
-                raw_response="".join(full_text),
+                raw_response=logged_response,
                 start_time=start_time,
                 success=True,
             )
@@ -96,12 +100,14 @@ async def generate(
                 "message": str(e)
             })
 
-            # 记录失败审计日志
+            # 记录失败审计日志（截断过长内容）
+            full_response = "".join(full_text)
+            logged_response = full_response[:2000] + ("...(truncated)" if len(full_response) > 2000 else "")
             await audit_service.log_generate_call(
                 user_id=user_id,
                 model_name=settings.DEEPSEEK_MODEL,
                 input_summary=f"{payload.brand} {payload.model}",
-                raw_response="".join(full_text),
+                raw_response=logged_response,
                 start_time=start_time,
                 success=False,
                 error_msg=str(e),

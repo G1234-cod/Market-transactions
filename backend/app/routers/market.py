@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query
 
 from app.models.schemas import MarketItem
 from app.db import crud
-from app.config import get_static_url, get_base_url
+from app.config import get_static_url, get_base_url, settings
 
 router = APIRouter(tags=["商城"])
 
@@ -20,7 +20,7 @@ async def get_market(
         # 处理图片 URL
         img_url = r.get("original_image_url", "")
         if img_url and not img_url.startswith("http"):
-            if img_url.startswith("/static/"):
+            if img_url.startswith(f"{settings.STATIC_PREFIX}/"):
                 img_url = f"{get_base_url()}{img_url}"
             else:
                 img_url = get_static_url(img_url)
@@ -32,7 +32,7 @@ async def get_market(
             original_image_url=img_url,
             ai_generated_title=r["ai_generated_title"],
             ai_generated_desc=r.get("ai_generated_desc"),
-           suggested_price=float(r["suggested_price"]) if r.get("suggested_price") is not None else None,
+            suggested_price=float(r["suggested_price"]) if r.get("suggested_price") is not None else None,
             category=r.get("category"),
             condition=r.get("condition"),  # ✅ 添加 condition 字段
             views=r.get("views", 0),

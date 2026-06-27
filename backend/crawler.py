@@ -45,15 +45,26 @@ class Crawler:
             return None
     
     def parse_items(self, html):
-        """解析商品列表（根据目标网站定制）"""
-        # 示例：解析闲鱼或转转的列表页
-        # 实际需要根据目标网站结构调整
+        """
+        解析商品列表 — 【需根据目标网站定制 CSS 选择器】
+
+        ⚠️ 当前为框架代码，`.item-class` / `.title-class` / `.price-class`
+        均为占位符。使用前必须：
+        1. 浏览器 F12 打开目标网站，找到实际 CSS class
+        2. 替换下方的选择器
+        3. 确认遵守目标网站的 robots.txt
+        """
         soup = BeautifulSoup(html, 'html.parser')
         items = []
-        # 示例选择器（需要根据实际网站修改）
-        for item in soup.select('.item-class'):
-            title = item.select_one('.title-class')
-            price = item.select_one('.price-class')
+
+        # TODO: 替换为实际网站的选择器
+        ITEM_SELECTOR = '.item-class'       # ← 替换为商品卡片 CSS class
+        TITLE_SELECTOR = '.title-class'     # ← 替换为标题 CSS class
+        PRICE_SELECTOR = '.price-class'     # ← 替换为价格 CSS class
+
+        for item in soup.select(ITEM_SELECTOR):
+            title = item.select_one(TITLE_SELECTOR)
+            price = item.select_one(PRICE_SELECTOR)
             img = item.select_one('img')
             if title and img:
                 items.append({

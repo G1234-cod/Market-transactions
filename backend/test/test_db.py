@@ -11,20 +11,15 @@ load_dotenv()
 import pymysql
 
 
-def get_db_config():
-    return {
+def test_can_connect():
+    """测试是否能连接到 MySQL"""
+    cfg = {
         "host": os.getenv("DB_HOST", "localhost"),
         "port": int(os.getenv("DB_PORT", 3306)),
         "user": os.getenv("DB_USER", "root"),
         "password": os.getenv("DB_PASSWORD", ""),
-        "db": os.getenv("DB_NAME", "market_transactions"),
     }
-
-
-def test_can_connect():
-    """测试是否能连接到 MySQL"""
-    cfg = get_db_config()
-    conn = pymysql.connect(host=cfg["host"], port=cfg["port"], user=cfg["user"], password=cfg["password"], charset="utf8mb4")
+    conn = pymysql.connect(**cfg, charset="utf8mb4")
     cur = conn.cursor()
     cur.execute("SELECT 1")
     assert cur.fetchone()[0] == 1
@@ -35,8 +30,13 @@ def test_can_connect():
 
 def test_get_version():
     """测试获取 MySQL 版本"""
-    cfg = get_db_config()
-    conn = pymysql.connect(host=cfg["host"], port=cfg["port"], user=cfg["user"], password=cfg["password"], charset="utf8mb4")
+    cfg = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 3306)),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+    }
+    conn = pymysql.connect(**cfg, charset="utf8mb4")
     cur = conn.cursor()
     cur.execute("SELECT VERSION()")
     version = cur.fetchone()[0]
@@ -47,8 +47,14 @@ def test_get_version():
 
 def test_users_table():
     """测试 users 表是否存在 + 数据"""
-    cfg = get_db_config()
-    conn = pymysql.connect(host=cfg["host"], port=cfg["port"], user=cfg["user"], password=cfg["password"], db=cfg["db"], charset="utf8mb4")
+    cfg = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 3306)),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "db": os.getenv("DB_NAME", "market_transactions"),
+    }
+    conn = pymysql.connect(**cfg, charset="utf8mb4")
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM users")
     count = cur.fetchone()[0]
@@ -62,8 +68,14 @@ def test_users_table():
 
 def test_market_prices():
     """测试 market_prices 表是否存在 + 数据统计"""
-    cfg = get_db_config()
-    conn = pymysql.connect(host=cfg["host"], port=cfg["port"], user=cfg["user"], password=cfg["password"], db=cfg["db"], charset="utf8mb4")
+    cfg = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 3306)),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "db": os.getenv("DB_NAME", "market_transactions"),
+    }
+    conn = pymysql.connect(**cfg, charset="utf8mb4")
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*), MIN(low_price), MAX(high_price) FROM market_prices")
     count, lo, hi = cur.fetchone()
@@ -80,8 +92,14 @@ def test_market_prices():
 
 def test_published_items():
     """测试 published_items 表是否存在"""
-    cfg = get_db_config()
-    conn = pymysql.connect(host=cfg["host"], port=cfg["port"], user=cfg["user"], password=cfg["password"], db=cfg["db"], charset="utf8mb4")
+    cfg = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 3306)),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "db": os.getenv("DB_NAME", "market_transactions"),
+    }
+    conn = pymysql.connect(**cfg, charset="utf8mb4")
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM published_items")
     count = cur.fetchone()[0]
@@ -92,8 +110,14 @@ def test_published_items():
 
 def test_ai_audit_logs():
     """测试 ai_audit_logs 表是否存在"""
-    cfg = get_db_config()
-    conn = pymysql.connect(host=cfg["host"], port=cfg["port"], user=cfg["user"], password=cfg["password"], db=cfg["db"], charset="utf8mb4")
+    cfg = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 3306)),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
+        "db": os.getenv("DB_NAME", "market_transactions"),
+    }
+    conn = pymysql.connect(**cfg, charset="utf8mb4")
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM ai_audit_logs")
     count = cur.fetchone()[0]

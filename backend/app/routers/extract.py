@@ -15,6 +15,7 @@ from app.services import vision_service, audit_service
 from app.llm.qwen_vl_client import QwenVLClient, EXTRACT_SYSTEM_PROMPT
 from app.utils.file_validator import validate_upload_file
 from app.dependencies import get_current_user
+from app.middleware.rate_limit import create_rate_limit
 
 # 导入双模型比对相关模块
 from app.ml.yolo_detector import YOLODetector
@@ -55,8 +56,9 @@ async def extract(
     request: Request,
     image: UploadFile = File(...),
     user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取，不可伪造
+    rate: None = Depends(create_rate_limit(10, 60)),  # Qwen-VL: 10次/分钟
 ):
-    """上传图片并提取商品特征"""
+    """上传图片并提取商品特征（速率限制: 10次/分钟）"""
     start_time = time.time()
 
     # ============================================================
@@ -86,7 +88,7 @@ async def extract(
     async with aiofiles.open(filepath, "wb") as f:
         await f.write(content)
 
-    image_url = f"/static/uploads/{filename}"
+    image_url = f"{settings.STATIC_PREFIX}/uploads/{filename}"
 
     from PIL import Image
     import io
@@ -143,29 +145,9 @@ async def extract(
     # ============================================================
     # 5. 双模型比对 + 错误数据收集
     # ============================================================
-    # ✅ 修复：使用整数类型的 item_id（如果无法解析，使用 None）
-    try:
-        # 尝试从 filename 提取整数 ID（如果 filename 包含数字）
-        # 或者使用 hash 作为整数 ID 的替代
-        item_id_int = None
-        
-        # 方法1：如果 item_id 是纯数字字符串，直接转换
-        if filename.isdigit():
-            item_id_int = int(filename)
-        else:
-            # 方法2：使用 uuid 的整数哈希（仅用于关联）
-            # 注意：这不能直接关联到 published_items，但至少不是字符串
-            # 更好的做法是使用 -1 表示未关联
-            item_id_int = -1
-            logger.warning(f"⚠️ filename 不是整数: {filename}，使用 -1 作为 item_id")
-        
-        # 方法3：如果 user_id 有值，可以用 user_id 作为关联
-        # 但 item_id 应该从数据库获取，目前没有则使用 -1
-        # 在实际场景中，应该有商品创建后的 ID 传入
-        
-    except Exception as e:
-        logger.warning(f"⚠️ 转换 item_id 失败: {e}，使用 -1")
-        item_id_int = -1
+    # item_id 说明：此阶段商品尚未创建（published_items 中无记录），
+    # 因此使用 -1 表示"未关联到已发布商品"。后续在商品创建后可更新。
+    item_id_int = -1
 
     try:
         yolo_detector = get_yolo_detector()

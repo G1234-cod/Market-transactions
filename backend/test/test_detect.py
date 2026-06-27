@@ -7,10 +7,10 @@ import pytest
 class TestDetect:
     """YOLO 检测测试"""
 
-    def test_yolo_detect_success(self, client, sample_image):
+    def test_yolo_detect_success(self, client, sample_image, auth_headers):
         """测试 YOLO 检测成功"""
         files = {"image": ("test.jpg", sample_image, "image/jpeg")}
-        response = client.post("/api/v1/yolo/detect", files=files)
+        response = client.post("/api/v1/yolo/detect", files=files, headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True

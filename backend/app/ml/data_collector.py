@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 class DataCollector:
     """错误数据收集器（带可靠异步保存机制）"""
     
-    def __init__(self, base_dir: str = "data/error_data"):
+    def __init__(self, base_dir: str = None):
+        if base_dir is None:
+            from app.config import settings
+            base_dir = settings.ERROR_DATA_DIR
         self.base_dir = Path(base_dir)
         self.images_dir = self.base_dir / "images"
         self.labels_dir = self.base_dir / "labels"

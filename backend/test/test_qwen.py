@@ -5,7 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 key = os.getenv("DASHSCOPE_API_KEY")
-print(f"Key: {key[:12]}...{key[-4:]}  (长度={len(key)})")
+if not key:
+    print("ERROR: DASHSCOPE_API_KEY not set")
+    sys.exit(1)
+print(f"Key: configured (length={len(key)})")  # 不打印密钥内容
 
 from openai import OpenAI
 

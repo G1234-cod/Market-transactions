@@ -316,10 +316,15 @@ def validate_config() -> list:
     if clip_name not in valid_clip_formats and '/' not in clip_name:
         errors.append(f"⚠️ CLIP_MODEL_NAME '{clip_name}' 可能不被 open_clip 支持")
 
+    # JWT 密钥验证（所有环境）
+    if settings.SECRET_KEY == "your-secret-key-change-in-production":
+        if is_production():
+            errors.append("❌ 生产环境 SECRET_KEY 使用默认值，请修改！")
+        else:
+            errors.append("⚠️ 开发环境 SECRET_KEY 使用默认占位符，JWT 令牌可被伪造！请设置环境变量 SECRET_KEY")
+
     # 生产环境特殊验证
     if is_production():
-        if settings.SECRET_KEY == "your-secret-key-change-in-production":
-            errors.append("❌ 生产环境 SECRET_KEY 使用默认值，请修改！")
         if "localhost" in settings.ALLOWED_ORIGINS:
             errors.append("⚠️ 生产环境 ALLOWED_ORIGINS 包含 localhost")
 

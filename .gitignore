@@ -32,3 +32,19 @@ Thumbs.db
 数据集/annotations_trainval2017.zip
 
 run_weekly_train.bat
+
+# ML 模型权重文件（太大，训练产物）
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# 数据集（太大，外部管理）
+数据集/
+backend/dataset/
+trainzui/*/dataset/images/
+trainzui/*/dataset/labels/
+trainzui/*/photo/
+
+# 训练输出
+runs/

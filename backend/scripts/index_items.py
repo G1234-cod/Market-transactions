@@ -15,7 +15,7 @@ import logging
 from app.ml.clip_extractor import get_extractor
 from app.ml.qdrant_client import get_qdrant
 from app.db import crud
-from app.config import get_base_url, get_static_url
+from app.config import get_base_url, get_static_url, settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def build_image_url(image_url: str) -> str:
         return image_url
     
     # 以 /static/ 开头
-    if image_url.startswith("/static/"):
+    if image_url.startswith(f"{settings.STATIC_PREFIX}/"):
         return f"{get_base_url()}{image_url}"
     
     # 使用静态文件工具函数
@@ -55,7 +55,7 @@ async def index_all_items():
     # 1. 检查 Qdrant 是否运行
     try:
         import requests as req
-        resp = req.get("http://localhost:6333/healthz", timeout=3)
+        resp = req.get(f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}/healthz", timeout=3)
         if resp.status_code != 200:
             print("❌ Qdrant 未正常运行")
             print("   请先启动: docker run -d -p 6333:6333 qdrant/qdrant")

@@ -20,6 +20,7 @@ from app.utils.file_validator import validate_upload_file
 from app.dependencies import get_current_user
 from app.services.price_service import query_price
 from app.models.schemas import PriceResult  # ✅ 导入类型
+from app.middleware.rate_limit import create_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,11 @@ async def process_image(
     category: str = Form(default="手机"),
     brand: str = Form(default="Apple"),
     model: str = Form(default="iPhone 14 Pro"),
+    rate: None = Depends(create_rate_limit(30, 60)),  # 全链路处理: 30次/分钟
 ):
     """
     全链路图片处理：预处理 + 瑕疵检测 + 画框标注 + 结构化数据 + DeepSeek 定价 + 数据库保存
+    （速率限制: 30次/分钟）
     """
     try:
         # ============================================================
@@ -103,7 +106,7 @@ async def process_image(
         uid = uuid.uuid4().hex
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_name = f"{timestamp}_{uid}"
-        annotated_path = f"static/uploads/annotated/{base_name}.png"
+        annotated_path = f"{settings.UPLOAD_DIR}/annotated/{base_name}.png"
         
         logger.info(f"📝 准备保存标注图: {annotated_path}")
         
@@ -139,19 +142,22 @@ async def process_image(
         # 6. ✅ 服务端查询市场均价（修复 BaseModel 访问）
         # ============================================================
         market_avg_price = 5000.0  # fallback 默认值
-        
+        price_fallback = False      # 是否使用了回退默认值
+
         try:
             # ✅ 查询市场行情（返回 PriceResult 对象）
             price_result: PriceResult = await query_price(brand=brand, model_name=model)
-            
+
             # ✅ 使用 . 属性访问（BaseModel 正确方式）
             if price_result and price_result.avg_price:
                 market_avg_price = float(price_result.avg_price)
                 logger.info(f"✅ 查询到市场均价: {market_avg_price}")
             else:
-                logger.warning(f"⚠️ 未查询到 {brand} {model} 的行情数据，使用默认值")
+                price_fallback = True
+                logger.warning(f"⚠️ 未查询到 {brand} {model} 的行情数据，使用默认值 {market_avg_price}")
         except Exception as e:
-            logger.error(f"❌ 查询市场行情失败: {e}，使用默认值")
+            price_fallback = True
+            logger.error(f"❌ 查询市场行情失败: {e}，使用默认值 {market_avg_price}")
 
         # ============================================================
         # 7. DeepSeek 定价
@@ -209,7 +215,9 @@ async def process_image(
                 'file_size': len(content)
             },
             'market_price': market_avg_price,
+            'price_fallback': price_fallback,  # ✅ 标记是否使用了回退默认值
             'message': f"处理完成，检测到 {result['defect_count']} 个瑕疵"
+            + (" (⚠️ 使用默认价格)" if price_fallback else "")
         }
 
         if deepseek_data:

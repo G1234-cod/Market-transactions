@@ -1,4 +1,12 @@
-"""图片预处理服务 - 为AI识别和YOLO检测优化图片"""
+"""图片预处理服务 - 为 AI 识别和 YOLO 检测优化图片
+
+⚠️ 预处理管线说明：
+- 本模块使用 PREPROCESS_SIZE=1024 的尺寸做坐标转换（供 damage_detector.py 使用）
+- app/utils/preprocess.py 使用 target_size=448 做另一种预处理（供 routers 中的视觉识别使用）
+- 两条管线独立运行，各自由对应的路由调用，不会交叉污染
+
+如需调整坐标转换精度，请修改此处的 PREPROCESS_SIZE。
+"""
 import os
 import uuid
 from typing import Tuple
@@ -7,7 +15,8 @@ import numpy as np
 from PIL import Image
 
 
-# 预处理后的目标尺寸
+# 预处理后的目标尺寸（用于坐标转换）
+# 注意：damage_detector.py 中的 _convert_polygon_to_original 依赖此常量
 PREPROCESS_SIZE = 1024
 
 

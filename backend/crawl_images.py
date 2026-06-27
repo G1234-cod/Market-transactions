@@ -1,9 +1,13 @@
 """
-二手商品图片爬虫工具
+二手商品图片爬虫工具 — 独立脚本，非系统运行必需
+
+⚠️ 当前硬编码了百度图片搜索的 URL 和 HTML class，可能随时失效。
+   百度修改页面结构后需要更新 `img_tags` 选择器和 `search_url`。
 
 使用方法:
 1. 安装依赖: pip install requests beautifulsoup4
 2. 运行: python crawl_images.py --query "二手手机 划痕" --count 100
+3. 如爬取失败，请检查百度图片页面是否改版
 
 注意: 请遵守目标网站的robots.txt规则
 """
@@ -18,12 +22,12 @@ import time
 def crawl_images(query, count, output_dir="dataset/crawl"):
     """爬取图片"""
     os.makedirs(output_dir, exist_ok=True)
-    
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    
-    # 使用百度图片搜索
+
+    # ⚠️ 百度图片搜索 — 如失效请替换为目标图片搜索引擎
     base_url = "https://image.baidu.com"
     search_url = f"{base_url}/search/index?tn=baiduimage&word={query}&pn="
     
@@ -37,6 +41,7 @@ def crawl_images(query, count, output_dir="dataset/crawl"):
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, "html.parser")
+            # ⚠️ 百度特定 class — 如失效需更新
             img_tags = soup.find_all("img", class_="main_img img-hover")
             
             if not img_tags:

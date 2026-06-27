@@ -1,12 +1,14 @@
 """YOLO损伤检测服务"""
 import os
 import uuid
+from pathlib import Path
 from typing import Tuple, Optional
 
 import cv2
 import numpy as np
 
 from app.models.schemas import DamageRegion, DAMAGE_COLORS
+from app.config import settings
 
 
 class DamageDetector:
@@ -17,16 +19,18 @@ class DamageDetector:
     """
 
     # 模型路径（训练后放置于此）
-    MODEL_PATH: str = "models/damage_seg.pt"
-    CONFIDENCE_THRESHOLD: float = 0.5  # 置信度阈值
+    MODEL_PATH: str = str(Path(__file__).parent.parent / "ml" / "models" / "damage_seg.pt")
+    CONFIDENCE_THRESHOLD: float = 0.3  # 置信度阈值（降低到0.3，适合缺陷检测）
 
-    # 损伤类别映射（与训练时的类别对应）
+    # 损伤类别映射（Kaputt 7 类，与 trainzui/train2 训练数据一致）
     CLASS_NAMES = {
-        0: "scratch",   # 划痕
-        1: "dent",      # 凹陷
-        2: "crack",     # 裂纹
-        3: "stain",     # 污渍
-        4: "other",     # 其他
+        0: "penetration",       # 穿透
+        1: "deformation",       # 变形
+        2: "actuation",         # 功能故障
+        3: "deconstruction",    # 结构损坏
+        4: "spillage",          # 溢漏
+        5: "superficial",       # 表面瑕疵
+        6: "missing_unit",      # 部件缺失
     }
 
     _instance: Optional['DamageDetector'] = None
@@ -124,7 +128,7 @@ class DamageDetector:
         annotated_path = os.path.join(output_dir, annotated_filename)
         cv2.imwrite(annotated_path, annotated_img, [cv2.IMWRITE_JPEG_QUALITY, 95])
 
-        annotated_url = f"/static/uploads/{annotated_filename}"
+        annotated_url = f"{settings.STATIC_PREFIX}/uploads/{annotated_filename}"
         return annotated_url, damage_regions
 
     def _convert_polygon_to_original(

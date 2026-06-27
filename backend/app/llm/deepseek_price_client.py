@@ -85,10 +85,10 @@ class DeepSeekPriceClient:
 }}
 
 注意：
-1. 重度损伤（如裂痕、变形）建议降价 15%-30%
-2. 中度损伤（如磕碰、明显划痕）建议降价 5%-15%
-3. 轻度损伤（如细微划痕）建议降价 0%-5%
-4. 轻微污渍基本不影响价格
+1. 重度损伤（如穿透、结构损坏、部件缺失）建议降价 20%-40%
+2. 中度损伤（如变形、功能故障）建议降价 10%-20%
+3. 轻度损伤（如溢漏）建议降价 3%-10%
+4. 轻微表面瑕疵基本不影响价格
 5. 结合市场参考价给出合理区间
 """
         return prompt
@@ -120,16 +120,32 @@ class DeepSeekPriceClient:
             prompt = self._build_prompt(product_info, defects_data)
             
             # 调用 DeepSeek
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "你是专业的二手商品估价专家，请根据商品信息和瑕疵情况给出合理的价格建议。"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,  # 低温度，输出更稳定
-                max_tokens=500,
-                response_format={"type": "json_object"}  # DeepSeek 支持 JSON 输出
-            )
+            # ✅ response_format={"type": "json_object"} 可能不被某些 API 端点支持
+            # 先尝试带 response_format 的调用，失败则回退到不带 response_format
+            extra_kwargs = {
+                "temperature": 0.3,  # 低温度，输出更稳定
+                "max_tokens": 500,
+            }
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "你是专业的二手商品估价专家，请根据商品信息和瑕疵情况给出合理的价格建议。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    **extra_kwargs,
+                )
+            except Exception:
+                logger.warning("⚠️ response_format 不支持，回退到普通调用")
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "你是专业的二手商品估价专家，请根据商品信息和瑕疵情况给出合理的价格建议。请仅输出 JSON，不要包含其他文字。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    **extra_kwargs,
+                )
             
             # 解析返回结果
             if not response.choices:

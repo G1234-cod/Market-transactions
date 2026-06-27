@@ -177,19 +177,23 @@ class SearchResponse(BaseModel):
 # ============================================================
 
 class DamageType(str, Enum):
-    SCRATCH = "scratch"       # 划痕 - 红色
-    DENT = "dent"             # 凹陷 - 蓝色
-    CRACK = "crack"           # 裂纹 - 黄色
-    STAIN = "stain"           # 污渍 - 绿色
-    OTHER = "other"           # 其他 - 橙色
+    PENETRATION = "penetration"           # 穿透 - 红色
+    DEFORMATION = "deformation"           # 变形 - 蓝色
+    ACTUATION = "actuation"               # 功能故障 - 黄色
+    DECONSTRUCTION = "deconstruction"     # 结构损坏 - 紫色
+    SPILLAGE = "spillage"                 # 溢漏 - 绿色
+    SUPERFICIAL = "superficial"           # 表面瑕疵 - 青色
+    MISSING_UNIT = "missing_unit"         # 部件缺失 - 橙色
 
 
 DAMAGE_COLORS = {
-    DamageType.SCRATCH: (255, 0, 0),      # 红色
-    DamageType.DENT: (0, 0, 255),         # 蓝色
-    DamageType.CRACK: (255, 255, 0),      # 黄色
-    DamageType.STAIN: (0, 255, 0),        # 绿色
-    DamageType.OTHER: (255, 165, 0),      # 橙色
+    DamageType.PENETRATION: (255, 0, 0),          # 红色
+    DamageType.DEFORMATION: (0, 0, 255),          # 蓝色
+    DamageType.ACTUATION: (255, 255, 0),           # 黄色
+    DamageType.DECONSTRUCTION: (128, 0, 128),      # 紫色
+    DamageType.SPILLAGE: (0, 255, 0),              # 绿色
+    DamageType.SUPERFICIAL: (0, 255, 255),         # 青色
+    DamageType.MISSING_UNIT: (255, 165, 0),        # 橙色
 }
 
 
