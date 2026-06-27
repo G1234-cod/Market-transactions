@@ -1,11 +1,11 @@
 <template>
   <div class="space-y-8">
-    <div class="text-center space-y-3">
+    <div class="text-center space-y-4">
       <div class="relative inline-block">
-        <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-xl -z-10"></div>
-        <h1 class="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary-600 via-accent-500 to-primary-800 bg-clip-text text-transparent relative">发布二手商品</h1>
+        <div class="absolute -inset-4 bg-gradient-to-r from-primary-500/30 to-primary-400/30 rounded-3xl blur-2xl -z-10"></div>
+        <h1 class="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary-200 via-white to-primary-100 bg-clip-text text-transparent relative">发布二手商品</h1>
       </div>
-      <p class="text-gray-400 text-sm sm:text-base max-w-md mx-auto">上传物品照片，AI 自动识别商品信息并生成专业带货文案</p>
+      <p class="text-primary-300 text-sm sm:text-base max-w-md mx-auto">上传物品照片，AI 自动识别商品信息并生成专业带货文案</p>
     </div>
 
     <div class="flex justify-center items-center gap-0">
@@ -13,16 +13,16 @@
         <div class="flex flex-col items-center gap-2 cursor-pointer group" @click="step >= i && (step = i)">
           <div class="relative">
             <div class="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-500"
-              :class="step >= i ? 'bg-gradient-to-br from-primary-500 via-primary-600 to-accent-500 text-white shadow-xl shadow-primary-500/30 scale-110' : 'bg-gray-100 text-gray-400 group-hover:bg-gray-200'">
+              :class="step >= i ? 'bg-gradient-to-br from-primary-500 via-primary-400 to-primary-300 text-white shadow-xl shadow-primary-500/40 scale-110' : 'bg-primary-800/50 text-primary-400 group-hover:bg-primary-700/50'">
               <span v-if="step > i">✓</span><span v-else>{{ i + 1 }}</span>
             </div>
-            <div v-if="step >= i" class="absolute -inset-1 bg-gradient-to-br from-primary-400 to-accent-400 rounded-full blur-lg opacity-40 -z-10 animate-pulse"></div>
+            <div v-if="step >= i" class="absolute -inset-1 bg-gradient-to-br from-primary-400/50 to-primary-500/50 rounded-full blur-lg opacity-50 -z-10 animate-pulse"></div>
           </div>
-          <span class="text-xs font-medium transition-colors" :class="step >= i ? 'text-primary-600' : 'text-gray-400 group-hover:text-gray-600'">{{ s.label }}</span>
+          <span class="text-xs font-medium transition-colors" :class="step >= i ? 'text-primary-200' : 'text-primary-500 group-hover:text-primary-400'">{{ s.label }}</span>
         </div>
         <div v-if="i < steps.length - 1" class="w-12 sm:w-24 h-1 mx-2 rounded-full transition-all duration-500 relative overflow-hidden"
-          :class="step > i ? 'bg-primary-200' : 'bg-gray-200'">
-          <div v-if="step > i" class="absolute inset-y-0 left-0 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500" style="width: 100%"></div>
+          :class="step > i ? 'bg-primary-700/50' : 'bg-primary-800/50'">
+          <div v-if="step > i" class="absolute inset-y-0 left-0 bg-gradient-to-r from-primary-500 to-primary-400 rounded-full transition-all duration-500" style="width: 100%"></div>
         </div>
       </template>
     </div>
@@ -32,7 +32,7 @@
         <ImageUploader v-model="imageFile" />
         <button 
           class="w-full py-4 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          :class="imageFile ? 'bg-gradient-to-r from-primary-500 via-primary-600 to-accent-500 hover:from-primary-600 hover:via-primary-700 hover:to-accent-600 shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 transform hover:-translate-y-0.5 active:translate-y-0' : 'bg-gray-300'"
+          :class="imageFile ? 'bg-gradient-to-r from-primary-500 via-primary-400 to-primary-300 hover:from-primary-400 hover:via-primary-300 hover:to-primary-200 shadow-lg shadow-primary-500/40 hover:shadow-xl hover:shadow-primary-500/50 transform hover:-translate-y-0.5 active:translate-y-0' : 'bg-primary-700/50'"
           :disabled="!imageFile || extracting" 
           @click="doExtract"
         >
@@ -44,14 +44,14 @@
       <div v-else-if="step === 1" key="confirm" class="space-y-4">
         <ConfirmCard :extractResult="extractResult" :priceInfo="priceInfo" :loading="queryingPrice"
           @confirm="doGenerate" @saveDraft="doSaveDraft" />
-        <button class="w-full py-3 text-gray-400 text-sm hover:text-gray-600 transition-colors flex items-center justify-center gap-1.5" @click="step = 0">
+        <button class="w-full py-3 text-primary-400 text-sm hover:text-primary-200 transition-colors flex items-center justify-center gap-1.5" @click="step = 0">
           <span>←</span> 返回重新上传
         </button>
       </div>
 
       <div v-else-if="step === 2" key="generate" class="space-y-4">
         <TypewriterText :text="generatedText" :active="generating" :done="generateDone" @save="doSave" />
-        <button class="w-full py-3 text-gray-400 text-sm hover:text-gray-600 transition-colors flex items-center justify-center gap-1.5" @click="resetAll">
+        <button class="w-full py-3 text-primary-400 text-sm hover:text-primary-200 transition-colors flex items-center justify-center gap-1.5" @click="resetAll">
           发布另一件商品 <span>→</span>
         </button>
       </div>
