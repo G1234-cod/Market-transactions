@@ -172,14 +172,17 @@ def validate_file_type(
     """
     allowed = allowed_mime_types or ALLOWED_MIME_TYPES
     
-    # 检查 MIME 类型
-    if content_type not in allowed:
-        return False, f"不支持的文件类型: {content_type}，仅支持: {', '.join(allowed.keys())}"
-    
-    # 检查扩展名
+    # 获取扩展名
     ext = Path(filename).suffix.lower()
-    if ext not in allowed.get(content_type, []):
-        return False, f"文件扩展名与 MIME 类型不匹配: {ext} -> {content_type}"
+    
+    # 优先检查扩展名是否在允许列表中
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f"不支持的文件扩展名: {ext}，仅支持: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+    
+    # MIME 类型检查（宽松模式：允许不匹配，因为浏览器发送的 MIME 类型不可靠）
+    # 如果 MIME 类型不在允许列表中但扩展名是允许的，给予警告但不阻止
+    if content_type not in allowed:
+        logger.warning(f"⚠️ 文件 MIME 类型 {content_type} 不在允许列表中，但扩展名 {ext} 是允许的，继续处理")
     
     return True, ""
 

@@ -5,6 +5,7 @@ import json
 import time
 import base64
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, Request, HTTPException, Depends
 import aiofiles
@@ -14,7 +15,7 @@ from app.models.schemas import ExtractResponse, ExtractResult
 from app.services import vision_service, audit_service
 from app.llm.qwen_vl_client import QwenVLClient, EXTRACT_SYSTEM_PROMPT
 from app.utils.file_validator import validate_upload_file
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user_optional
 from app.middleware.rate_limit import create_rate_limit
 
 # 导入双模型比对相关模块
@@ -55,7 +56,7 @@ def get_data_collector():
 async def extract(
     request: Request,
     image: UploadFile = File(...),
-    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取，不可伪造
+    user_id: Optional[int] = Depends(get_current_user_optional),  # ✅ 可选认证
     rate: None = Depends(create_rate_limit(10, 60)),  # Qwen-VL: 10次/分钟
 ):
     """上传图片并提取商品特征（速率限制: 10次/分钟）"""
@@ -65,16 +66,20 @@ async def extract(
     # ✅ 1. 文件上传校验
     # ============================================================
     try:
+        logger.info(f"📤 收到图片上传请求: filename={image.filename}, content_type={image.content_type}, user_id={user_id}")
         file_content, safe_filename = await validate_upload_file(
             file=image,
             max_size=settings.MAX_UPLOAD_SIZE,
             check_content=True
         )
         content = file_content
+        logger.info(f"✅ 文件验证通过: size={len(content)} bytes, safe_filename={safe_filename}")
     except HTTPException as e:
+        logger.error(f"❌ 文件验证失败（HTTPException）: {e.detail}, filename={image.filename}, content_type={image.content_type}")
         await image.seek(0)
         raise e
     except Exception as e:
+        logger.error(f"❌ 文件验证失败（Exception）: {str(e)}, filename={image.filename}, content_type={image.content_type}")
         await image.seek(0)
         raise HTTPException(status_code=400, detail=f"文件验证失败: {str(e)}")
 

@@ -91,6 +91,26 @@ export default {
           900: '#111827',
           950: '#030712',
         },
+        // 表面色
+        surface: {
+          DEFAULT: '#ffffff',
+          secondary: '#fafafa',
+          tertiary: '#f5f5f5',
+          hover: '#f0f0f0',
+        },
+        // 文字色
+        text: {
+          primary: '#1f2937',
+          secondary: '#6b7280',
+          muted: '#9ca3af',
+          light: '#d1d5db',
+        },
+        // 边框色
+        border: {
+          DEFAULT: '#e5e7eb',
+          light: '#f3f4f6',
+          hover: '#d1d5db',
+        },
       },
       // ============================================================
       // 字体
