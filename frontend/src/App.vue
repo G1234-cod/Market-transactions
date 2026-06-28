@@ -4,9 +4,9 @@
       跳转到主内容
     </a>
 
-    <header v-if="isLoggedIn || routePath === '/market'" class="sticky top-0 z-50 backdrop-blur-lg bg-primary-900/95 border-b border-primary-700/50 shadow-lg shadow-primary-900/20" role="navigation">
+    <header v-if="routePath === '/market' || (isLoggedIn && routePath !== '/login' && routePath !== '/register')" class="sticky top-0 z-50 backdrop-blur-lg bg-primary-900/95 border-b border-primary-700/50 shadow-lg shadow-primary-900/20" role="navigation">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <router-link to="/" class="flex items-center gap-2.5 group" aria-label="返回首页">
+        <router-link :to="isLoggedIn ? '/home' : '/market'" class="flex items-center gap-2.5 group" aria-label="返回首页">
           <div class="relative">
             <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-primary-500/30 group-hover:shadow-xl group-hover:shadow-primary-500/40 transition-all">二</div>
             <div class="absolute -inset-1 bg-gradient-to-br from-primary-400/30 to-primary-600/30 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -15,8 +15,8 @@
         </router-link>
         <nav class="flex items-center gap-1" aria-label="主导航">
           <template v-if="isLoggedIn">
-            <router-link to="/" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all focus:ring-2 focus:ring-primary-400 focus:outline-none"
-              :class="$route.path === '/' ? 'bg-primary-700/80 text-primary-100' : 'text-primary-200 hover:text-white hover:bg-primary-800/50'">发布</router-link>
+            <router-link to="/home" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all focus:ring-2 focus:ring-primary-400 focus:outline-none"
+              :class="$route.path === '/home' ? 'bg-primary-700/80 text-primary-100' : 'text-primary-200 hover:text-white hover:bg-primary-800/50'">发布</router-link>
             <router-link to="/history" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all focus:ring-2 focus:ring-primary-400 focus:outline-none"
               :class="$route.path === '/history' ? 'bg-primary-700/80 text-primary-100' : 'text-primary-200 hover:text-white hover:bg-primary-800/50'">历史</router-link>
           </template>

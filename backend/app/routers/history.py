@@ -60,7 +60,6 @@ async def get_history(
             category=r.get("category"),
             condition=r.get("condition"),  # ✅ 使用 condition
             views=r.get("views", 0),
-            likes=r.get("likes", 0),
             created_at=str(r["created_at"]),
         ))
     return {"items": items}

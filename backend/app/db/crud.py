@@ -178,14 +178,14 @@ async def update_item_status(item_id: int, status: str):
 
 
 async def get_history(user_id: int) -> list[dict]:
-    """获取用户发布历史（含 views, likes）"""
+    """获取用户发布历史（含 views）"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
                 """SELECT id, user_id, original_image_url, ai_generated_title,
                           ai_generated_desc, suggested_price, status, category,
-                          brand, model, `condition`, views, likes, created_at
+                          brand, model, `condition`, views, created_at
                    FROM published_items 
                    WHERE user_id = %s 
                    ORDER BY created_at DESC LIMIT 50""",
@@ -199,7 +199,7 @@ async def get_market_items(
     keyword: str = "",
     category: str = "",
 ) -> list[dict]:
-    """获取商城商品列表（含 views, likes, condition, brand, model）"""
+    """获取商城商品列表（含 views, condition, brand, model）"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -207,7 +207,7 @@ async def get_market_items(
                 SELECT p.id, p.user_id, u.username, p.original_image_url,
                        p.ai_generated_title, p.ai_generated_desc, p.suggested_price,
                        p.category, p.brand, p.model, p.`condition`, 
-                       p.views, p.likes, p.created_at
+                       p.views, p.created_at
                 FROM published_items p 
                 JOIN users u ON p.user_id = u.id 
                 WHERE p.status = 'published'
@@ -265,7 +265,7 @@ async def update_item_defects(
 
 
 async def get_item_by_id(item_id: int) -> dict | None:
-    """根据ID获取商品信息（含 views, likes）"""
+    """根据ID获取商品信息（含 views）"""
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -273,7 +273,7 @@ async def get_item_by_id(item_id: int) -> dict | None:
                 """SELECT id, user_id, original_image_url, bg_removed_url, annotated_url,
                           ai_generated_title, ai_generated_desc, suggested_price,
                           category, brand, model, `condition`, status,
-                          views, likes, defect_count, defect_data, created_at
+                          views, defect_count, defect_data, created_at
                    FROM published_items WHERE id = %s""",
                 (item_id,)
             )
@@ -301,7 +301,7 @@ async def get_items_by_ids(item_ids: list[int]) -> dict[int, dict]:
                 f"""SELECT id, user_id, original_image_url, bg_removed_url, annotated_url,
                           ai_generated_title, ai_generated_desc, suggested_price,
                           category, brand, model, `condition`, status,
-                          views, likes, defect_count, defect_data, created_at
+                          views, defect_count, defect_data, created_at
                    FROM published_items WHERE id IN ({placeholders})""",
                 item_ids
             )
@@ -310,7 +310,7 @@ async def get_items_by_ids(item_ids: list[int]) -> dict[int, dict]:
 
 
 # ============================================================
-# views/likes 更新操作
+# views 更新操作
 # ============================================================
 
 async def increment_views(item_id: int) -> None:
@@ -322,59 +322,6 @@ async def increment_views(item_id: int) -> None:
                 "UPDATE published_items SET views = views + 1 WHERE id = %s",
                 (item_id,)
             )
-
-
-async def toggle_like(item_id: int, user_id: int) -> bool:
-    """
-    切换点赞状态（显式事务）
-    
-    Returns:
-        bool: True 表示点赞成功，False 表示取消点赞
-    """
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            # ✅ 显式开始事务
-            await cur.execute("START TRANSACTION")
-            try:
-                # 检查是否已点赞
-                await cur.execute(
-                    "SELECT id FROM item_likes WHERE item_id = %s AND user_id = %s",
-                    (item_id, user_id)
-                )
-                existing = await cur.fetchone()
-                
-                if existing:
-                    # 取消点赞
-                    await cur.execute(
-                        "DELETE FROM item_likes WHERE item_id = %s AND user_id = %s",
-                        (item_id, user_id)
-                    )
-                    await cur.execute(
-                        "UPDATE published_items SET likes = likes - 1 WHERE id = %s",
-                        (item_id,)
-                    )
-                    is_liked = False
-                else:
-                    # 点赞
-                    await cur.execute(
-                        "INSERT INTO item_likes (item_id, user_id) VALUES (%s, %s)",
-                        (item_id, user_id)
-                    )
-                    await cur.execute(
-                        "UPDATE published_items SET likes = likes + 1 WHERE id = %s",
-                        (item_id,)
-                    )
-                    is_liked = True
-                
-                # ✅ 提交事务
-                await cur.execute("COMMIT")
-                return is_liked
-                
-            except Exception as e:
-                # ✅ 回滚事务
-                await cur.execute("ROLLBACK")
-                raise e
 
 
 # ============================================================

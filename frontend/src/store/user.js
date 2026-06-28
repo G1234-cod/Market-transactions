@@ -1,30 +1,23 @@
-/** 全局用户状态（简单响应式共享） */
+/** 全局用户状态 */
 import { reactive, computed } from 'vue'
 
 const state = reactive({
-  user: null, // { id, username }
+  user: null,
 })
 
 export function useUser() {
   function login(user) {
     state.user = user
-    localStorage.setItem('user', JSON.stringify(user))
+    localStorage.setItem('token', user.access_token || '')
   }
 
   function logout() {
     state.user = null
-    localStorage.removeItem('user')
-  }
-
-  function restoreUser() {
-    const raw = localStorage.getItem('user')
-    if (raw) {
-      try { state.user = JSON.parse(raw) } catch { state.user = null }
-    }
+    localStorage.removeItem('token')
   }
 
   const isLoggedIn = computed(() => !!state.user)
-  const userId = computed(() => state.user?.id || 1)
+  const userId = computed(() => state.user?.user_id || 0)
 
-  return { state, login, logout, restoreUser, isLoggedIn, userId }
+  return { state, login, logout, isLoggedIn, userId }
 }

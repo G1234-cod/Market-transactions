@@ -107,9 +107,8 @@ async function doRegister() {
   loading.value = true
   error.value = ''
   try {
-    const user = await apiRegister(username.value.trim(), password.value)
-    login(user)
-    router.push('/')
+    await apiRegister(username.value.trim(), password.value)
+    router.push('/login')
   } catch (e) {
     error.value = e?.response?.data?.detail || '注册失败，请重试'
   } finally {

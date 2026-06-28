@@ -71,7 +71,6 @@ CREATE TABLE `published_items` (
   `condition`          VARCHAR(200)  NULL     DEFAULT NULL   COMMENT '成色描述',
   `status`             VARCHAR(20)   NOT NULL DEFAULT 'draft' COMMENT '状态: draft/published/delisted',
   `views`              INT           NOT NULL DEFAULT 0      COMMENT '浏览次数',
-  `likes`              INT           NOT NULL DEFAULT 0      COMMENT '点赞数',
   `retry_count`        INT           NOT NULL DEFAULT 0      COMMENT '重试次数',
   `created_at`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -107,24 +106,7 @@ CREATE TABLE `ai_audit_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI审计日志表';
 
 -- ------------------------------------------------------------
--- 5. item_likes - 点赞记录表
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `item_likes`;
-CREATE TABLE `item_likes` (
-  `id`         BIGINT   NOT NULL AUTO_INCREMENT COMMENT '点赞ID',
-  `item_id`    BIGINT   NOT NULL                COMMENT '商品ID',
-  `user_id`    BIGINT   NOT NULL                COMMENT '用户ID',
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '点赞时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_item_user` (`item_id`, `user_id`),
-  INDEX `idx_item_id` (`item_id`),
-  INDEX `idx_user_id` (`user_id`),
-  CONSTRAINT `fk_likes_item` FOREIGN KEY (`item_id`) REFERENCES `published_items` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_likes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='点赞记录表';
-
--- ------------------------------------------------------------
--- 6. hard_cases - 错题本（错误数据收集）
+-- 5. hard_cases - 错题本（错误数据收集）
 -- ------------------------------------------------------------
 DROP TABLE IF EXISTS `hard_cases`;
 CREATE TABLE `hard_cases` (

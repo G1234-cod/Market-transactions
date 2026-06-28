@@ -36,7 +36,6 @@ async def get_market(
             category=r.get("category"),
             condition=r.get("condition"),  # ✅ 添加 condition 字段
             views=r.get("views", 0),
-            likes=r.get("likes", 0),
             created_at=str(r["created_at"]),
         ))
     return {"items": items}

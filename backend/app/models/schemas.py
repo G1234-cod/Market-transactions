@@ -112,7 +112,6 @@ class HistoryItem(BaseModel):
     status: str
     created_at: str
     views: int = 0
-    likes: int = 0
     category: Optional[str] = None
     condition: Optional[str] = None  # ✅ 改为 condition
     
@@ -140,10 +139,8 @@ class MarketItem(BaseModel):
     category: Optional[str] = None
     condition: Optional[str] = None  # ✅ 改为 condition
     views: int = 0
-    likes: int = 0
     created_at: str
-    is_liked: bool = False
-    
+
     # ✅ 兼容旧字段名
     @property
     def item_condition(self) -> Optional[str]:

@@ -62,7 +62,7 @@
       </div>
       <p class="text-primary-300 font-medium text-lg">还没有发布记录</p>
       <p class="text-primary-500 text-sm mt-2">去发布页生成第一条带货文案吧</p>
-      <router-link to="/" class="mt-5 inline-block px-6 py-3 rounded-xl bg-gradient-to-r from-primary-500 via-primary-400 to-primary-300 text-white text-sm font-medium hover:from-primary-400 hover:via-primary-300 hover:to-primary-200 shadow-lg shadow-primary-500/40 hover:shadow-xl hover:shadow-primary-500/50 transition-all transform hover:-translate-y-0.5">前往发布 →</router-link>
+      <router-link to="/home" class="mt-5 inline-block px-6 py-3 rounded-xl bg-gradient-to-r from-primary-500 via-primary-400 to-primary-300 text-white text-sm font-medium hover:from-primary-400 hover:via-primary-300 hover:to-primary-200 shadow-lg shadow-primary-500/40 hover:shadow-xl hover:shadow-primary-500/50 transition-all transform hover:-translate-y-0.5">前往发布 →</router-link>
     </div>
 
     <div v-else class="space-y-4">
