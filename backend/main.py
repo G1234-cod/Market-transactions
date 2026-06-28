@@ -121,13 +121,26 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 static_dir = str(settings.BASE_DIR / settings.UPLOAD_DIR.split("/")[0])
 app.mount(settings.STATIC_PREFIX, StaticFiles(directory=static_dir), name="static")
 
+# ============================================================
+# 挂载前端构建产物的资源文件
+# ============================================================
+
+frontend_dist_dir = str(settings.BASE_DIR / "static" / "dist")
+if os.path.exists(frontend_dist_dir):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_dir, "assets")), name="frontend-assets")
 
 # ============================================================
 # 健康检查 / 根路径
 # ============================================================
 
 @app.get("/")
-async def root():
+async def root(request: Request):
+    frontend_dist_dir = str(settings.BASE_DIR / "static" / "dist")
+    index_path = os.path.join(frontend_dist_dir, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(content=f.read(), media_type="text/html")
     return {
         "service": "智能二手商品发布助手",
         "version": "1.0.0",

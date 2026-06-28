@@ -1,19 +1,21 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center px-4 pt-12 pb-8 bg-gradient-to-br from-primary-950 via-primary-900 to-primary-800">
-    <div class="w-full max-w-sm">
+  <div class="min-h-screen flex items-center justify-center px-4 py-8">
+    <div class="w-full max-w-md">
       <div class="text-center mb-8">
         <div class="relative inline-block">
-          <div class="absolute -inset-4 bg-gradient-to-br from-primary-400/30 to-primary-600/30 rounded-3xl blur-2xl animate-pulse"></div>
-          <div class="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-400 via-primary-500 to-primary-600 inline-flex items-center justify-center text-white text-4xl font-bold shadow-2xl shadow-primary-500/40">二</div>
+          <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-2xl"></div>
+          <div class="relative w-20 h-20 rounded-2xl gradient-primary inline-flex items-center justify-center text-white text-4xl font-bold shadow-xl shadow-primary-500/40">
+            <span>二</span>
+          </div>
         </div>
-        <h1 class="mt-8 text-2xl font-bold text-white">创建账号</h1>
-        <p class="text-primary-300 text-sm mt-2">加入智能二手交易社区</p>
+        <h1 class="mt-8 text-2xl font-bold gradient-text">创建账号</h1>
+        <p class="text-text-muted text-sm mt-2">加入智能二手交易社区</p>
       </div>
 
-      <div class="bg-primary-800/60 backdrop-blur-xl rounded-2xl shadow-2xl border border-primary-700/50 p-7 space-y-6">
-        <form @submit.prevent="doRegister" aria-label="注册表单">
+      <div class="glass-card p-8">
+        <form @submit.prevent="doRegister" aria-label="注册表单" class="space-y-6">
           <div class="space-y-2">
-            <label for="reg-username" class="block text-xs text-primary-300 font-medium uppercase tracking-wider">用户名</label>
+            <label for="reg-username" class="block text-sm font-medium text-text-secondary">用户名</label>
             <input 
               id="reg-username"
               v-model="username" 
@@ -22,14 +24,14 @@
               autocomplete="username"
               name="username"
               spellcheck="false"
-              class="w-full px-4 py-3 bg-primary-900/50 border border-primary-600 rounded-xl text-sm text-white placeholder:text-primary-400 focus:bg-primary-900 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/30 focus:outline-none transition-all"
+              class="input-field"
               aria-required="true"
               :aria-invalid="error !== ''"
             />
           </div>
 
           <div class="space-y-2">
-            <label for="reg-password" class="block text-xs text-primary-300 font-medium uppercase tracking-wider">密码</label>
+            <label for="reg-password" class="block text-sm font-medium text-text-secondary">密码</label>
             <input 
               id="reg-password"
               v-model="password" 
@@ -38,14 +40,14 @@
               maxlength="50"
               autocomplete="new-password"
               name="password"
-              class="w-full px-4 py-3 bg-primary-900/50 border border-primary-600 rounded-xl text-sm text-white placeholder:text-primary-400 focus:bg-primary-900 focus:border-primary-400 focus:ring-2 focus:ring-primary-500/30 focus:outline-none transition-all"
+              class="input-field"
               aria-required="true"
               :aria-invalid="error !== ''"
             />
           </div>
 
           <div class="space-y-2">
-            <label for="reg-confirm" class="block text-xs text-primary-300 font-medium uppercase tracking-wider">确认密码</label>
+            <label for="reg-confirm" class="block text-sm font-medium text-text-secondary">确认密码</label>
             <input 
               id="reg-confirm"
               v-model="confirm" 
@@ -54,18 +56,20 @@
               maxlength="50"
               autocomplete="new-password"
               name="confirm_password"
-              class="w-full px-4 py-3 bg-primary-900/50 border rounded-xl text-sm text-white placeholder:text-primary-400 focus:bg-primary-900 focus:outline-none transition-all"
-              :class="confirm && password !== confirm ? 'border-red-500 bg-red-900/30 focus:border-red-400 focus:ring-red-500/30' : 'border-primary-600 focus:border-primary-400 focus:ring-primary-500/30'"
+              class="input-field"
+              :class="confirm && password !== confirm ? 'bg-red-50 border-red-300 focus:border-red-400 focus:ring-red-100' : ''"
               :aria-invalid="confirm && password !== confirm"
             />
-            <p v-if="confirm && password !== confirm" class="text-xs text-red-400 mt-1 ml-1" role="alert">两次密码不一致</p>
+            <p v-if="confirm && password !== confirm" class="text-sm text-red-500" role="alert">两次密码不一致</p>
           </div>
 
-          <div v-if="error" class="text-xs text-red-400 text-center mt-3" role="alert" aria-live="polite">{{ error }}</div>
+          <div v-if="error" class="text-sm text-red-500 text-center" role="alert" aria-live="polite">
+            {{ error }}
+          </div>
 
           <button 
             type="submit"
-            class="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-primary-500 via-primary-400 to-primary-300 hover:from-primary-400 hover:via-primary-300 hover:to-primary-200 shadow-lg shadow-primary-500/40 hover:shadow-xl hover:shadow-primary-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
+            class="btn-primary w-full"
             :disabled="!canSubmit || loading"
           >
             <span v-if="loading" class="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
@@ -73,9 +77,15 @@
           </button>
         </form>
 
-        <p class="text-center text-xs text-primary-400 pt-3">
-          已有账号？<router-link to="/login" class="text-primary-200 hover:text-white hover:underline transition-colors">去登录</router-link>
+        <p class="text-center text-sm text-text-muted mt-6">
+          已有账号？<router-link to="/login" class="text-primary-600 hover:text-primary-700 hover:underline font-medium transition-colors">去登录</router-link>
         </p>
+      </div>
+
+      <div class="mt-8 flex justify-center gap-6 text-xs text-text-muted">
+        <span>📱 AI 智能识别</span>
+        <span>🔍 瑕疵检测</span>
+        <span>💰 智能定价</span>
       </div>
     </div>
   </div>

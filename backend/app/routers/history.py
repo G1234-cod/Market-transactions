@@ -1,6 +1,7 @@
 """GET /api/v1/history — 查询发布历史 + POST /api/v1/history/save — 保存发布记录 + 下架/发布操作"""
 import logging
 import io
+from typing import Optional
 from fastapi import APIRouter, Query, Depends, HTTPException, status
 from PIL import Image
 import httpx
@@ -10,7 +11,7 @@ from app.db import crud
 from app.ml.clip_extractor import get_extractor
 from app.ml.qdrant_client import get_qdrant
 from app.config import get_static_url, get_base_url, settings
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user_optional, get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,11 @@ def build_image_url(image_url: str) -> str:
 
 @router.get("/history")
 async def get_history(
-    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取，不可伪造
+    user_id: Optional[int] = Depends(get_current_user_optional),  # ✅ 可选认证
 ):
     """查询当前用户的发布记录列表"""
+    if user_id is None:
+        return {"items": []}
     rows = await crud.get_history(user_id)
     items = []
     for r in rows:
@@ -69,15 +72,16 @@ async def get_history(
 @router.post("/history/save")
 async def save_history(
     payload: GenerateSaveRequest,
-    user_id: int = Depends(get_current_user),  # ✅ 从 JWT 获取，不可伪造
+    user_id: Optional[int] = Depends(get_current_user_optional),  # ✅ 可选认证
 ):
     """
     保存生成的文案到发布记录（可指定 status: published / draft）
     保存成功后自动加入以图搜图索引
     """
-    # ✅ 使用从 JWT 获取的 user_id，忽略客户端传入的
+    # ✅ 使用认证的 user_id，未登录时使用默认用户
+    final_user_id = user_id if user_id is not None else 1
     item_id = await crud.insert_published_item(
-        user_id=user_id,  # ✅ 来自认证，不可伪造
+        user_id=final_user_id,
         image_url=payload.image_url,
         title=payload.title,
         desc=payload.desc,

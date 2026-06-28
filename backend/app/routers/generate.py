@@ -2,6 +2,7 @@
 import json
 import time
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -9,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from app.models.schemas import GenerateRequest
 from app.services import text_service, audit_service
 from app.config import settings
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user_optional
 from app.middleware.rate_limit import create_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ def sse_event(data: dict) -> str:
 @router.post("/generate")
 async def generate(
     payload: GenerateRequest,
-    user_id: int = Depends(get_current_user),  # ✅ JWT 认证
+    user_id: Optional[int] = Depends(get_current_user_optional),  # ✅ 可选认证
     rate: None = Depends(create_rate_limit(20, 60)),  # DeepSeek: 20次/分钟
 ):
     """SSE 流式生成商品带货文案
