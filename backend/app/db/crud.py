@@ -194,35 +194,111 @@ async def get_history(user_id: int) -> list[dict]:
             return await cur.fetchall()
 
 
-# ✅ 修复：添加 condition, brand, model 列
+# 排序字段白名单（防止 SQL 注入）
+_MARKET_SORT_COLUMNS = {
+    "created_at": "p.created_at",
+    "price": "p.suggested_price",
+}
+
+
 async def get_market_items(
     keyword: str = "",
     category: str = "",
-) -> list[dict]:
-    """获取商城商品列表（含 views, condition, brand, model）"""
+    condition: str = "",
+    price_min: float = None,
+    price_max: float = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[dict], int]:
+    """
+    获取商城商品列表（分页 + 排序 + 多维筛选）
+
+    Returns:
+        tuple[list[dict], int]: (商品列表, 总条数)
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
-            sql = """
-                SELECT p.id, p.user_id, u.username, p.original_image_url,
-                       p.ai_generated_title, p.ai_generated_desc, p.suggested_price,
-                       p.category, p.brand, p.model, p.`condition`, 
-                       p.views, p.created_at
-                FROM published_items p 
-                JOIN users u ON p.user_id = u.id 
-                WHERE p.status = 'published'
-            """
-            params = []
+            # ============================================================
+            # 构建 WHERE 子句
+            # ============================================================
+            where_parts = ["p.status = 'published'"]
+            params: list = []
+
             if keyword:
-                sql += " AND (p.ai_generated_title LIKE %s OR p.ai_generated_desc LIKE %s)"
+                where_parts.append(
+                    "(p.ai_generated_title LIKE %s OR p.ai_generated_desc LIKE %s)"
+                )
                 kw = f"%{keyword}%"
                 params.extend([kw, kw])
+
             if category:
-                sql += " AND p.category = %s"
+                where_parts.append("p.category = %s")
                 params.append(category)
-            sql += " ORDER BY p.created_at DESC LIMIT 100"
-            await cur.execute(sql, params)
-            return await cur.fetchall()
+
+            if condition:
+                where_parts.append("p.`condition` LIKE %s")
+                params.append(f"%{condition}%")
+
+            if price_min is not None:
+                where_parts.append("p.suggested_price >= %s")
+                params.append(price_min)
+
+            if price_max is not None:
+                where_parts.append("p.suggested_price <= %s")
+                params.append(price_max)
+
+            where_clause = " AND ".join(where_parts)
+
+            # ============================================================
+            # COUNT 查询
+            # ============================================================
+            count_sql = (
+                "SELECT COUNT(*) AS total FROM published_items p "
+                "JOIN users u ON p.user_id = u.id "
+                f"WHERE {where_clause}"
+            )
+            await cur.execute(count_sql, params)
+            total_row = await cur.fetchone()
+            total = total_row["total"] if total_row else 0
+
+            # ============================================================
+            # 排序（白名单映射防注入）
+            # ============================================================
+            sort_col = _MARKET_SORT_COLUMNS.get(sort_by, "p.created_at")
+            order_dir = "DESC" if sort_order.lower() == "desc" else "ASC"
+
+            # 价格排序时：NULL 值排最后
+            if sort_by == "price":
+                null_pos = "DESC" if order_dir == "ASC" else "ASC"
+                order_clause = (
+                    f"ORDER BY CASE WHEN p.suggested_price IS NULL THEN 1 ELSE 0 END {null_pos}, "
+                    f"{sort_col} {order_dir}"
+                )
+            else:
+                order_clause = f"ORDER BY {sort_col} {order_dir}"
+
+            # ============================================================
+            # 数据查询（分页）
+            # ============================================================
+            offset = (page - 1) * page_size
+            data_sql = (
+                "SELECT p.id, p.user_id, u.username, p.original_image_url, "
+                "p.ai_generated_title, p.ai_generated_desc, p.suggested_price, "
+                "p.category, p.brand, p.model, p.`condition`, "
+                "p.views, p.created_at "
+                "FROM published_items p "
+                "JOIN users u ON p.user_id = u.id "
+                f"WHERE {where_clause} "
+                f"{order_clause} "
+                "LIMIT %s OFFSET %s"
+            )
+            await cur.execute(data_sql, params + [page_size, offset])
+            items = await cur.fetchall()
+
+            return items, total
 
 
 # ============================================================

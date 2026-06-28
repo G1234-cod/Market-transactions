@@ -179,11 +179,28 @@ export async function publishItem(id) {
 }
 
 // ============================================================
-// 商城
+// 商城（分页 + 排序 + 多维筛选）
 // ============================================================
-export async function getMarket(keyword = '', category = '') {
-  const { data } = await api.get('/market', { params: { keyword, category } })
-  return data.items || []
+export async function getMarket({
+  keyword = '',
+  category = '',
+  condition = '',
+  priceMin = null,
+  priceMax = null,
+  sortBy = 'created_at',
+  sortOrder = 'desc',
+  page = 1,
+  pageSize = 20,
+} = {}) {
+  const params = { page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder }
+  if (keyword) params.keyword = keyword
+  if (category) params.category = category
+  if (condition) params.condition = condition
+  if (priceMin != null) params.price_min = priceMin
+  if (priceMax != null) params.price_max = priceMax
+
+  const { data } = await api.get('/market', { params })
+  return data   // { total, page, page_size, total_pages, items }
 }
 
 // ============================================================

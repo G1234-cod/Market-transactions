@@ -1,20 +1,55 @@
 """GET /api/v1/market — 商城商品列表（全用户已发布商品）"""
+import math
 from fastapi import APIRouter, Query
+from typing import Optional
 
-from app.models.schemas import MarketItem
+from app.models.schemas import MarketItem, MarketListResponse
 from app.db import crud
 from app.config import get_static_url, get_base_url, settings
 
 router = APIRouter(tags=["商城"])
 
 
-@router.get("/market")
+@router.get(
+    "/market",
+    response_model=MarketListResponse,
+    summary="商城商品列表（分页+排序+多维筛选）",
+)
 async def get_market(
-    keyword: str = Query(default="", description="搜索关键词"),
-    category: str = Query(default="", description="品类筛选"),
+    keyword: str = Query(default="", description="搜索关键词（匹配标题和描述）"),
+    category: str = Query(default="", description="品类筛选：手机/笔记本/平板/外设/耳机/手表"),
+    condition: str = Query(default="", description="成色筛选（模糊匹配，如 95新）"),
+    price_min: Optional[float] = Query(default=None, ge=0, description="最低价（≥0）"),
+    price_max: Optional[float] = Query(default=None, ge=0, description="最高价（≥0）"),
+    sort_by: str = Query(default="created_at", description="排序字段: created_at（时间）/ price（价格）"),
+    sort_order: str = Query(default="desc", description="排序方向: asc（升序）/ desc（降序），默认 desc"),
+    page: int = Query(default=1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(default=20, ge=1, le=100, description="每页数量，1-100"),
 ):
-    """查询所有用户已发布的商品，支持关键词搜索和品类筛选"""
-    rows = await crud.get_market_items(keyword=keyword, category=category)
+    """
+    商城商品列表（全用户已发布商品）
+
+    支持多维筛选：
+    - **keyword**: 关键词搜索（匹配标题和描述）
+    - **category**: 品类筛选（如 手机）
+    - **condition**: 成色筛选（模糊匹配，如 95新）
+    - **price_min / price_max**: 价格区间筛选
+    - **sort_by**: created_at（按时间排序）/ price（按价格排序）
+    - **sort_order**: asc（升序）/ desc（降序），默认 desc
+    - **page / page_size**: 分页参数，默认每页 20 条
+    """
+    rows, total = await crud.get_market_items(
+        keyword=keyword,
+        category=category,
+        condition=condition,
+        price_min=price_min,
+        price_max=price_max,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
+
     items = []
     for r in rows:
         # 处理图片 URL
@@ -24,7 +59,7 @@ async def get_market(
                 img_url = f"{get_base_url()}{img_url}"
             else:
                 img_url = get_static_url(img_url)
-        
+
         items.append(MarketItem(
             id=r["id"],
             user_id=r["user_id"],
@@ -34,8 +69,17 @@ async def get_market(
             ai_generated_desc=r.get("ai_generated_desc"),
             suggested_price=float(r["suggested_price"]) if r.get("suggested_price") is not None else None,
             category=r.get("category"),
-            condition=r.get("condition"),  # ✅ 添加 condition 字段
+            condition=r.get("condition"),
             views=r.get("views", 0),
             created_at=str(r["created_at"]),
         ))
-    return {"items": items}
+
+    total_pages = math.ceil(total / page_size) if total > 0 else 0
+
+    return MarketListResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        items=items,
+    )

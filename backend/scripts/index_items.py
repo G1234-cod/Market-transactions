@@ -68,9 +68,9 @@ async def index_all_items():
     print("✅ Qdrant 连接正常")
     print(f"📌 服务器地址: {get_base_url()}")
 
-    # 2. 获取所有已发布商品
+    # 2. 获取所有已发布商品（第一页取足够多，覆盖所有商品）
     print("\n📊 获取商品列表...")
-    items = await crud.get_market_items()
+    items, total = await crud.get_market_items(page=1, page_size=10000)
     
     if not items:
         print("⚠️ 没有已发布的商品")

@@ -279,6 +279,30 @@ class PaginatedResponse(BaseModel):
 
 
 # ============================================================
+# 商城筛选 + 分页
+# ============================================================
+
+class MarketFilterParams(PaginationParams):
+    """商城筛选 & 分页参数"""
+    keyword: str = Field(default="", description="搜索关键词")
+    category: str = Field(default="", description="品类筛选")
+    condition: str = Field(default="", description="成色筛选")
+    price_min: Optional[float] = Field(default=None, ge=0, description="最低价")
+    price_max: Optional[float] = Field(default=None, ge=0, description="最高价")
+    sort_by: str = Field(default="created_at", description="排序字段: created_at / price")
+    sort_order: str = Field(default="desc", description="排序方向: asc / desc")
+
+
+class MarketListResponse(BaseModel):
+    """商城分页响应"""
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    items: List[Any] = []
+
+
+# ============================================================
 # 通用响应
 # ============================================================
 
