@@ -159,7 +159,7 @@
       </div>
 
       <!-- ✅ R5: 市场行情参考 -->
-      <div v-if="priceInfo && priceInfo.matched" class="rounded-xl overflow-hidden">
+      <div v-if="priceInfo && priceInfo.matched && priceInfo.avg_price != null" class="rounded-xl overflow-hidden">
         <div class="bg-gradient-to-r from-accent-50 via-accent-50/50 to-accent-100/50 border border-accent-200 px-4 py-4">
           <div class="flex items-center justify-between mb-3">
             <span class="text-xs text-accent-700 font-medium flex items-center gap-1.5">
@@ -174,8 +174,8 @@
             </div>
             <div class="flex-1 pb-1.5">
               <div class="flex justify-between text-[10px] text-accent-500/70 mb-0.5">
-                <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
-                <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
+                <span>¥{{ (priceInfo.low_price || 0).toLocaleString() }}</span>
+                <span>¥{{ (priceInfo.high_price || 0).toLocaleString() }}</span>
               </div>
               <div class="relative h-2.5 bg-accent-200/50 rounded-full overflow-hidden">
                 <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-accent-300 rounded-full transition-all duration-700"
@@ -186,7 +186,7 @@
         </div>
       </div>
 
-      <div v-if="priceInfo && priceInfo.matched && !local.suggested_price" class="rounded-xl overflow-hidden">
+      <div v-if="priceInfo && priceInfo.matched && !local.suggested_price && priceInfo.avg_price != null" class="rounded-xl overflow-hidden">
         <div class="bg-gradient-to-r from-accent-50 via-accent-50/50 to-accent-100/50 border border-accent-200 px-4 py-4">
           <div class="flex items-center justify-between mb-3">
             <span class="text-xs text-accent-700 font-medium flex items-center gap-1.5">
@@ -201,8 +201,8 @@
             </div>
             <div class="flex-1 pb-1.5">
               <div class="flex justify-between text-[10px] text-accent-500/70 mb-0.5">
-                <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
-                <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
+                <span>¥{{ (priceInfo.low_price || 0).toLocaleString() }}</span>
+                <span>¥{{ (priceInfo.high_price || 0).toLocaleString() }}</span>
               </div>
               <div class="relative h-2.5 bg-accent-200/50 rounded-full overflow-hidden">
                 <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-accent-300 rounded-full transition-all duration-700"
@@ -403,8 +403,11 @@ function borderClass(key) {
 
 const lowPct = computed(() => {
   if (!props.priceInfo?.matched) return 0
-  const range = Math.max(1, props.priceInfo.high_price - props.priceInfo.low_price)
-  return Math.max(0, ((props.priceInfo.avg_price - props.priceInfo.low_price) / range) * 80)
+  const high = props.priceInfo.high_price ?? 0
+  const low = props.priceInfo.low_price ?? 0
+  const avg = props.priceInfo.avg_price ?? 0
+  const range = Math.max(1, high - low)
+  return Math.max(0, ((avg - low) / range) * 80)
 })
 const rangePct = computed(() => 20)
 

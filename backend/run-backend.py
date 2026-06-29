@@ -8,6 +8,10 @@
     python run-backend.py --no-browser      # 不自动打开浏览器
 """
 import os
+
+# ✅ 国内网络环境：使用 HuggingFace 镜像下载模型
+os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+
 import subprocess
 import time
 import webbrowser
