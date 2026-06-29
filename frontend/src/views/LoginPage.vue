@@ -54,13 +54,19 @@
             {{ error }}
           </div>
 
+          <!-- 提交按钮 -->
           <button 
             type="submit"
             class="btn-primary w-full text-lg py-4 ripple-container"
             :disabled="!canSubmit || loading"
           >
-            <span v-if="loading" class="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-            {{ loading ? '登录中…' : '登录' }}
+            <span class="relative z-10 flex items-center justify-center gap-3">
+              <span v-if="loading" class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span v-else class="text-lg">→</span>
+              <span>{{ loading ? '登录中...' : '开始探索' }}</span>
+            </span>
+            <!-- 按钮光效 -->
+            <div v-if="canSubmit && !loading" class="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
           </button>
         </form>
 
@@ -117,9 +123,20 @@ async function doLogin() {
       router.push('/home')
     }
   } catch (e) {
-    error.value = e?.response?.data?.detail || '登录失败，请重试'
+    error.value = e?.response?.data?.detail || '登录失败，请检查用户名和密码'
   } finally {
     loading.value = false
   }
 }
 </script>
+
+<style scoped>
+/* 确保输入框在深色背景上可见 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: white;
+  -webkit-box-shadow: 0 0 0px 1000px #1e1b4b inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+</style>

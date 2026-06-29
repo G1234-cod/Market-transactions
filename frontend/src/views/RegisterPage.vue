@@ -139,6 +139,7 @@ import { register as apiRegister } from '../api/index.js'
 const router = useRouter()
 
 const username = ref('')
+const email = ref('')
 const password = ref('')
 const confirm = ref('')
 const role = ref('user')

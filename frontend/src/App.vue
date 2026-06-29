@@ -135,7 +135,7 @@ let _id = 0
 function showToast(text, type = 'info') {
   const id = ++_id
   toasts.value.push({ id, text, type })
-  setTimeout(() => removeToast(id), 3500)
+  setTimeout(() => removeToast(id), 4000)
 }
 function removeToast(id) { toasts.value = toasts.value.filter(t => t.id !== id) }
 function toastClass(t) {
@@ -144,15 +144,19 @@ function toastClass(t) {
     : t === 'warning' ? 'bg-amber-500/90 border-amber-500/50 text-space shadow-lg shadow-amber-500/30'
     : 'bg-primary-500/90 border-primary-500/50 text-white shadow-lg shadow-primary-500/30'
 }
-function toastIcon(t) { return t === 'success' ? '✓' : t === 'error' ? '✗' : t === 'warning' ? '⚠' : 'ℹ' }
 provide('toast', showToast)
 </script>
 
 <style scoped>
 @keyframes slide-up {
-  from { opacity: 0; transform: translateY(16px) scale(0.96); }
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(100px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-right { animation: slide-in-right 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .animate-slide-up { animation: slide-up 0.3s ease; }
 .toast-enter-active { animation: slide-up 0.3s ease; }
 .toast-leave-active  { transition: all 0.2s ease; }
