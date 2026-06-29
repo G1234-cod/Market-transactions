@@ -4,146 +4,153 @@ export default {
     './index.html',
     './src/**/*.{vue,js,ts,jsx,tsx}',
   ],
-  darkMode: 'class',
   theme: {
     extend: {
+      // ============================================================
+      // 颜色系统（Primary + Accent）
+      // ============================================================
       colors: {
-        space: {
-          DEFAULT: '#0F0F1A',
-          light: '#1A1A2E',
-          lighter: '#252540',
-          card: '#16162A',
-          cardHover: '#1E1E38',
-        },
+        // Primary 色系（主色 - 蓝色/靛蓝系）
         primary: {
-          50: '#EEF2FF',
-          100: '#E0E7FF',
-          200: '#C7D2FE',
-          300: '#A5B4FC',
-          400: '#818CF8',
-          500: '#6366F1',
-          600: '#4F46E5',
-          700: '#4338CA',
-          800: '#3730A3',
-          900: '#312E81',
-          950: '#1E1B4B',
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',    // 主色
+          600: '#4f46e5',    // hover 主色
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
+          950: '#1e1b4b',
         },
+        // Accent 色系（强调色 - 紫色/粉紫系）
         accent: {
-          50: '#FAF5FF',
-          100: '#F3E8FF',
-          200: '#E9D5FF',
-          300: '#D8B4FE',
-          400: '#C084FC',
-          500: '#8B5CF6',
-          600: '#7C3AED',
-          700: '#6D28D9',
-          800: '#5B21B6',
-          900: '#4C1D95',
-          950: '#2E1065',
+          50: '#faf5ff',
+          100: '#f3e8ff',
+          200: '#e9d5ff',
+          300: '#d8b4fe',
+          400: '#c084fc',
+          500: '#a855f7',    // 主强调色
+          600: '#9333ea',    // hover 强调色
+          700: '#7e22ce',
+          800: '#6b21a8',
+          900: '#581c87',
+          950: '#3b0764',
         },
-        amber: {
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          300: '#FCD34D',
-          400: '#FBBF24',
-          500: '#F59E0B',
-          600: '#D97706',
-          700: '#B45309',
-          800: '#92400E',
-          900: '#78350F',
-        },
+        // 成功色
         success: {
-          50: '#ECFDF5',
-          100: '#D1FAE5',
-          200: '#A7F3D0',
-          300: '#6EE7B7',
-          400: '#34D399',
-          500: '#10B981',
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#10b981',
           600: '#059669',
           700: '#047857',
-          800: '#065F46',
-          900: '#064E3B',
+          800: '#065f46',
+          900: '#064e3b',
         },
+        // 警告色
         warning: {
-          50: '#FFFBEB',
-          100: '#FEF3C7',
-          200: '#FDE68A',
-          300: '#FCD34D',
-          400: '#FBBF24',
-          500: '#F59E0B',
-          600: '#D97706',
-          700: '#B45309',
-          800: '#92400E',
-          900: '#78350F',
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
         },
+        // 危险色
         danger: {
-          50: '#FEF2F2',
-          100: '#FEE2E2',
-          200: '#FECACA',
-          300: '#FCA5A5',
-          400: '#F87171',
-          500: '#EF4444',
-          600: '#DC2626',
-          700: '#B91C1C',
-          800: '#991B1B',
-          900: '#7F1D1D',
+          50: '#fef2f2',
+          100: '#fee2e2',
+          200: '#fecaca',
+          300: '#fca5a5',
+          400: '#f87171',
+          500: '#ef4444',
+          600: '#dc2626',
+          700: '#b91c1c',
+          800: '#991b1b',
+          900: '#7f1d1d',
         },
+        // 灰色系（扩展）
+        gray: {
+          50: '#f9fafb',
+          100: '#f3f4f6',
+          200: '#e5e7eb',
+          300: '#d1d5db',
+          400: '#9ca3af',
+          500: '#6b7280',
+          600: '#4b5563',
+          700: '#374151',
+          800: '#1f2937',
+          900: '#111827',
+          950: '#030712',
+        },
+        // 表面色
+        surface: {
+          DEFAULT: '#ffffff',
+          secondary: '#fafafa',
+          tertiary: '#f5f5f5',
+          hover: '#f0f0f0',
+        },
+        // 文字色
         text: {
-          primary: '#F8FAFC',
-          secondary: '#94A3B8',
-          muted: '#64748B',
-          light: '#475569',
+          primary: '#1f2937',
+          secondary: '#6b7280',
+          muted: '#9ca3af',
+          light: '#d1d5db',
         },
+        // 边框色
         border: {
-          DEFAULT: '#334155',
-          light: '#1E293B',
-          hover: '#475569',
+          DEFAULT: '#e5e7eb',
+          light: '#f3f4f6',
+          hover: '#d1d5db',
         },
       },
+      // ============================================================
+      // 字体
+      // ============================================================
       fontFamily: {
-        sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
+      // ============================================================
+      // 边框半径
+      // ============================================================
       borderRadius: {
         '4xl': '2rem',
         '5xl': '2.5rem',
       },
+      // ============================================================
+      // 阴影
+      // ============================================================
       boxShadow: {
-        'glow': '0 0 20px rgba(99, 102, 241, 0.3)',
-        'glow-lg': '0 0 40px rgba(99, 102, 241, 0.4)',
-        'glow-accent': '0 0 20px rgba(139, 92, 246, 0.3)',
-        'card': '0 4px 24px rgba(0, 0, 0, 0.4)',
-        'card-hover': '0 20px 40px rgba(99, 102, 241, 0.3)',
-        'glass': '0 8px 32px rgba(0, 0, 0, 0.3)',
+        'primary': '0 4px 14px 0 rgba(99, 102, 241, 0.4)',
+        'primary-lg': '0 8px 30px 0 rgba(99, 102, 241, 0.3)',
+        'accent': '0 4px 14px 0 rgba(168, 85, 247, 0.4)',
+        'accent-lg': '0 8px 30px 0 rgba(168, 85, 247, 0.3)',
+        'success': '0 4px 14px 0 rgba(16, 185, 129, 0.4)',
+        'danger': '0 4px 14px 0 rgba(239, 68, 68, 0.4)',
       },
+      // ============================================================
+      // 动画
+      // ============================================================
       animation: {
-        'fade-in': 'fadeIn 0.6s ease-out forwards',
-        'fade-in-up': 'fadeInUp 0.6s ease-out forwards',
-        'slide-up': 'slideUp 0.6s ease-out forwards',
-        'slide-down': 'slideDown 0.6s ease-out forwards',
-        'slide-left': 'slideLeft 0.6s ease-out forwards',
-        'slide-right': 'slideRight 0.6s ease-out forwards',
+        'fade-in': 'fadeIn 0.3s ease-in-out',
+        'slide-up': 'slideUp 0.4s ease-out',
+        'slide-down': 'slideDown 0.4s ease-out',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'float': 'float 6s ease-in-out infinite',
-        'float-slow': 'floatSlow 12s ease-in-out infinite',
-        'float-medium': 'floatMedium 8s ease-in-out infinite',
-        'float-fast': 'floatFast 6s ease-in-out infinite',
-        'float-diagonal': 'floatDiagonal 10s ease-in-out infinite',
-        'float-spiral': 'floatSpiral 15s linear infinite',
-        'shimmer': 'shimmer 2s linear infinite',
-        'ripple': 'ripple 0.6s ease-out forwards',
-        'glow-pulse': 'glowPulse 2s ease-in-out infinite',
-        'scale-in': 'scaleIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+        'bounce-slow': 'bounce 2s infinite',
       },
       keyframes: {
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },
-        },
-        fadeInUp: {
-          '0%': { opacity: '0', transform: 'translateY(30px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         slideUp: {
           '0%': { opacity: '0', transform: 'translateY(20px)' },
@@ -152,63 +159,6 @@ export default {
         slideDown: {
           '0%': { opacity: '0', transform: 'translateY(-20px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        slideLeft: {
-          '0%': { opacity: '0', transform: 'translateX(-40px)' },
-          '100%': { opacity: '1', transform: 'translateX(0)' },
-        },
-        slideRight: {
-          '0%': { opacity: '0', transform: 'translateX(40px)' },
-          '100%': { opacity: '1', transform: 'translateX(0)' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-10px)' },
-        },
-        floatSlow: {
-          '0%, 100%': { transform: 'translateY(0) translateX(0)' },
-          '25%': { transform: 'translateY(-20px) translateX(10px)' },
-          '50%': { transform: 'translateY(-10px) translateX(-10px)' },
-          '75%': { transform: 'translateY(-30px) translateX(5px)' },
-        },
-        floatMedium: {
-          '0%, 100%': { transform: 'translateY(0) translateX(0) rotate(0deg)' },
-          '25%': { transform: 'translateY(-15px) translateX(15px) rotate(2deg)' },
-          '50%': { transform: 'translateY(-5px) translateX(-15px) rotate(0deg)' },
-          '75%': { transform: 'translateY(-25px) translateX(10px) rotate(-2deg)' },
-        },
-        floatFast: {
-          '0%, 100%': { transform: 'translateY(0) scale(1)' },
-          '50%': { transform: 'translateY(-15px) scale(1.05)' },
-        },
-        floatDiagonal: {
-          '0%, 100%': { transform: 'translate(0, 0)' },
-          '25%': { transform: 'translate(30px, -20px)' },
-          '50%': { transform: 'translate(10px, -40px)' },
-          '75%': { transform: 'translate(-20px, -25px)' },
-        },
-        floatSpiral: {
-          '0%': { transform: 'translate(0, 0) rotate(0deg)' },
-          '25%': { transform: 'translate(20px, -30px) rotate(90deg)' },
-          '50%': { transform: 'translate(-10px, -50px) rotate(180deg)' },
-          '75%': { transform: 'translate(-30px, -20px) rotate(270deg)' },
-          '100%': { transform: 'translate(0, 0) rotate(360deg)' },
-        },
-        shimmer: {
-          '0%': { backgroundPosition: '-200% 0' },
-          '100%': { backgroundPosition: '200% 0' },
-        },
-        ripple: {
-          '0%': { transform: 'scale(0)', opacity: '0.5' },
-          '100%': { transform: 'scale(4)', opacity: '0' },
-        },
-        glowPulse: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(99, 102, 241, 0.3)' },
-          '50%': { boxShadow: '0 0 40px rgba(99, 102, 241, 0.6)' },
-        },
-        scaleIn: {
-          '0%': { opacity: '0', transform: 'scale(0.8)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
         },
       },
     },

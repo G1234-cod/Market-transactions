@@ -15,22 +15,22 @@
     <div class="glass-card p-5">
       <div class="flex gap-2 mb-6">
         <button
-          class="px-5 py-2.5 rounded-xl text-sm font-medium transition-all ripple-container"
-          :class="searchMode === 'image' ? 'gradient-primary text-white shadow-lg shadow-primary-500/30' : 'bg-space-lighter/50 text-text-secondary hover:bg-primary-500/10 hover:text-primary-400'"
+          class="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
+          :class="searchMode === 'image' ? 'gradient-primary text-white shadow-lg shadow-primary-500/30' : 'bg-surface-secondary text-text-secondary hover:bg-primary-50 hover:text-primary-600'"
           @click="searchMode = 'image'"
         >
           <span class="mr-2">🖼️</span>以图搜图
         </button>
         <button
-          class="px-5 py-2.5 rounded-xl text-sm font-medium transition-all ripple-container"
-          :class="searchMode === 'text' ? 'gradient-primary text-white shadow-lg shadow-primary-500/30' : 'bg-space-lighter/50 text-text-secondary hover:bg-primary-500/10 hover:text-primary-400'"
+          class="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
+          :class="searchMode === 'text' ? 'gradient-primary text-white shadow-lg shadow-primary-500/30' : 'bg-surface-secondary text-text-secondary hover:bg-primary-50 hover:text-primary-600'"
           @click="searchMode = 'text'"
         >
           <span class="mr-2">📝</span>以文搜图
         </button>
         <button
-          class="px-5 py-2.5 rounded-xl text-sm font-medium transition-all ripple-container"
-          :class="searchMode === 'filter' ? 'gradient-primary text-white shadow-lg shadow-primary-500/30' : 'bg-space-lighter/50 text-text-secondary hover:bg-primary-500/10 hover:text-primary-400'"
+          class="px-5 py-2.5 rounded-xl text-sm font-medium transition-all"
+          :class="searchMode === 'filter' ? 'gradient-primary text-white shadow-lg shadow-primary-500/30' : 'bg-surface-secondary text-text-secondary hover:bg-primary-50 hover:text-primary-600'"
           @click="switchToFilterMode"
         >
           <span class="mr-2">🔍</span>按类别型号
@@ -46,19 +46,19 @@
           @drop.prevent="handleDrop"
         >
           <div v-if="!searchImage" class="space-y-4">
-                <div class="w-20 h-20 mx-auto rounded-2xl bg-space-lighter/50 flex items-center justify-center">
-                  <span class="text-4xl">📷</span>
-                </div>
-                <div>
-                  <p class="text-text-secondary font-medium">拖拽图片到这里</p>
-                  <p class="text-text-muted text-sm mt-1">或点击下方按钮选择文件</p>
-                </div>
-                <button
-                  class="btn-outline ripple-container"
-                  @click="triggerFileInput"
-                >
-                  选择图片
-                </button>
+            <div class="w-20 h-20 mx-auto rounded-2xl bg-surface-secondary flex items-center justify-center">
+              <span class="text-4xl">📷</span>
+            </div>
+            <div>
+              <p class="text-text-secondary font-medium">拖拽图片到这里</p>
+              <p class="text-text-muted text-sm mt-1">或点击下方按钮选择文件</p>
+            </div>
+            <button
+              class="btn-outline"
+              @click="triggerFileInput"
+            >
+              选择图片
+            </button>
             <input
               ref="fileInput"
               type="file"
@@ -140,8 +140,8 @@
 
       <!-- 按类别型号搜索 (数据库直查) -->
       <div v-else-if="searchMode === 'filter'" class="space-y-4">
-        <div class="bg-gradient-to-r from-accent-500/10 to-primary-500/10 rounded-xl p-4 mb-2 border border-accent-500/20">
-          <p class="text-sm text-accent-400 font-medium">📋 按品类、品牌、型号精确查找商品</p>
+        <div class="bg-gradient-to-r from-accent-50 to-primary-50 rounded-xl p-4 mb-2">
+          <p class="text-sm text-accent-700 font-medium">📋 按品类、品牌、型号精确查找商品</p>
           <p class="text-xs text-text-muted mt-1">从数据库直接查询，支持级联筛选</p>
         </div>
 
@@ -187,14 +187,14 @@
                 @keydown.enter="performFilterSearch"
               />
               <div v-if="filterForm.model && filteredModelSuggestions.length > 0"
-                class="absolute top-full left-0 right-0 bg-space-card border border-border rounded-xl shadow-xl shadow-black/50 z-20 max-h-48 overflow-y-auto mt-1">
+                class="absolute top-full left-0 right-0 bg-white border border-border rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto mt-1">
                 <div
                   v-for="m in filteredModelSuggestions"
                   :key="m.model"
-                  class="px-4 py-2 text-sm hover:bg-primary-500/10 cursor-pointer flex items-center justify-between"
+                  class="px-4 py-2 text-sm hover:bg-primary-50 cursor-pointer flex items-center justify-between"
                   @click="selectModelSuggestion(m)"
                 >
-                  <span class="text-text-primary">{{ m.model }}</span>
+                  <span>{{ m.model }}</span>
                   <span class="text-xs text-text-muted">{{ m.count }}件</span>
                 </div>
               </div>
@@ -247,19 +247,19 @@
         <div class="flex gap-2">
           <button
             v-if="searchMode === 'filter' && filterPage > 1"
-            class="btn-secondary-sm ripple-container"
+            class="btn-secondary-sm"
             @click="changeFilterPage(filterPage - 1)"
           >
             ← 上一页
           </button>
           <button
             v-if="searchMode === 'filter' && filterPage < filterTotalPages"
-            class="btn-secondary-sm ripple-container"
+            class="btn-secondary-sm"
             @click="changeFilterPage(filterPage + 1)"
           >
             下一页 →
           </button>
-          <button class="btn-secondary-sm ripple-container" @click="clearResults">
+          <button class="btn-secondary-sm" @click="clearResults">
             清空结果
           </button>
         </div>
@@ -270,36 +270,38 @@
         <div
           v-for="item in searchResults"
           :key="item.id"
-          class="glass-card-hover group cursor-pointer overflow-hidden"
+          class="glass-card-hover group cursor-pointer"
           @click="goToMarket"
         >
-          <div class="relative w-full h-48 bg-space-lighter/30 flex items-center justify-center overflow-hidden group-hover:scale-105 transition-transform duration-500">
+          <div class="image-hover-zoom">
             <img
               :src="item.image_url"
               :alt="(item.brand || '') + ' ' + (item.model || '')"
-              class="w-full h-full object-cover"
+              class="w-full h-48 object-cover"
               @error="handleImageError"
             />
-            <div class="absolute inset-0 bg-gradient-to-t from-space-card/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           </div>
           <div class="p-4">
             <div class="flex flex-wrap gap-1.5 mb-2">
-              <span v-if="item.category" class="px-2 py-0.5 rounded-md text-xs font-medium bg-accent-500/10 text-accent-400">{{ item.category }}</span>
-              <span v-if="item.brand" class="px-2 py-0.5 rounded-md text-xs font-medium bg-primary-500/10 text-primary-400">{{ item.brand }}</span>
-              <span v-if="item.model" class="px-2 py-0.5 rounded-md text-xs font-medium bg-space-lighter/50 text-text-secondary">{{ item.model }}</span>
+              <span v-if="item.category" class="px-2 py-0.5 rounded-md text-xs font-medium bg-accent-100 text-accent-700">{{ item.category }}</span>
+              <span v-if="item.brand" class="px-2 py-0.5 rounded-md text-xs font-medium bg-primary-100 text-primary-700">{{ item.brand }}</span>
+              <span v-if="item.model" class="px-2 py-0.5 rounded-md text-xs font-medium bg-surface-secondary text-text-secondary">{{ item.model }}</span>
             </div>
             <div v-if="item.reason" class="text-xs text-text-muted mt-1">{{ item.reason }}</div>
             <div class="flex items-center justify-between mt-3">
-              <span v-if="item.price" class="text-lg font-bold text-amber-400 font-variant-numeric">
+              <span v-if="item.price" class="text-lg font-bold text-accent-600">
                 ¥{{ formatPrice(item.price) }}
               </span>
               <span v-else class="text-sm text-text-muted">价格待定</span>
-              <span v-if="item.similarity !== undefined" class="px-2 py-1 rounded-full text-xs bg-primary-500/10 text-primary-400">
+              <span v-if="item.similarity !== undefined" class="px-2 py-1 rounded-full text-xs bg-primary-100 text-primary-700">
                 {{ Math.round(item.similarity * 100) }}% 相似
               </span>
             </div>
             <div class="flex items-center gap-2 mt-2">
-              <span v-if="item.username" class="text-xs text-text-muted">{{ item.username }}</span>
+              <span v-if="item.category" class="text-xs text-text-muted">{{ item.category }}</span>
+              <span v-if="item.brand" class="text-xs text-text-muted">/ {{ item.brand }}</span>
+              <span v-if="item.model" class="text-xs text-text-muted">/ {{ item.model }}</span>
+              <span v-if="item.username" class="text-xs text-text-muted ml-auto">{{ item.username }}</span>
             </div>
           </div>
         </div>
@@ -309,14 +311,14 @@
     <!-- 无结果状态 -->
     <div v-else-if="hasSearched && !searching" class="glass-card p-12 text-center">
       <div class="relative inline-block mb-6">
-        <div class="absolute -inset-4 bg-gradient-to-br from-warning-500/20 to-accent-500/20 rounded-2xl blur-lg -z-10"></div>
-        <div class="w-24 h-24 rounded-full bg-space-lighter/50 flex items-center justify-center border border-border/50">
+        <div class="absolute -inset-4 bg-gradient-to-br from-warning-400/30 to-accent-400/30 rounded-2xl blur-lg -z-10"></div>
+        <div class="w-24 h-24 rounded-full bg-surface-secondary flex items-center justify-center">
           <span class="text-5xl">🤔</span>
         </div>
       </div>
       <p class="text-text-secondary font-medium text-lg">全网暂无同款</p>
       <p class="text-text-muted text-sm mt-2">你是第一个发现它的人！</p>
-      <router-link to="/home" class="mt-5 inline-block btn-primary ripple-container">
+      <router-link to="/" class="mt-5 inline-block btn-primary">
         🚀 去发布赚取第一桶金
       </router-link>
     </div>
