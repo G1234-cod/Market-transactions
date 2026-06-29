@@ -1,3 +1,5 @@
+
+
 # 智能二手商品发布助手
 
 > 面向二手商品交易的一站式 AI 发布平台。上传一张商品图片，AI 自动识别品类/品牌/型号/成色、查询市场行情、检测瑕疵并智能定价、流式生成带货文案，一键发布到商城。
@@ -41,7 +43,6 @@
 |------|------|
 | 商品列表 | 多用户共享商城，按时间倒序，最多 100 条 |
 | 搜索筛选 | 关键词模糊搜索（标题+描述）+ 品类精确筛选 |
-| 点赞 | 事务保证点赞数一致性，防重复点赞 |
 | 下架/发布 | 商品所有者可随时上下架 |
 
 ### 视觉能力
@@ -91,7 +92,7 @@
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | **后端框架** | Python 3.11 · FastAPI · Uvicorn | 异步 Web 框架，原生 async/await |
-| **数据库** | MySQL 8.0 · aiomysql | 异步连接池，8 张表，参数化查询 |
+| **数据库** | MySQL 8.0 · aiomysql | 异步连接池，7 张表，参数化查询 |
 | **向量搜索** | Qdrant · CLIP ViT-B-32 | 512 维语义向量，COSINE 相似度 |
 | **前端** | Vue 3 · Vite · Tailwind CSS · Axios | Composition API，ESM 原生热更新 |
 | **AI 大模型** | DeepSeek · Qwen-VL-Max | 文案生成+定价+视觉识别 |
@@ -114,7 +115,7 @@ FastAPI (:8000)
    │    │    │
    │    │    └── HTTP ───────────▶ Qwen-VL-Max API（视觉识别）
    │    │
-   │    ├── MySQL 8.0 (用户/商品/行情/审计/点赞/错题本)
+   │    ├── MySQL 8.0 (用户/商品/行情/审计/错题本/特征向量)
    │    ├── Qdrant (CLIP 512维向量搜索)
    │    ├── YOLOv8 本地推理（物品检测 + 瑕疵分割）
    │    └── CLIP 本地推理（图文特征提取）
@@ -193,7 +194,7 @@ python torchzidong.py
 mysql -u root -p < database\schema.sql
 ```
 
-输入 MySQL 密码后自动建库建表（8 张表 + 16 条种子行情数据）。
+输入 MySQL 密码后自动建库建表（7 张表 + 16 条种子行情数据）。
 
 验证：
 
@@ -201,7 +202,7 @@ mysql -u root -p < database\schema.sql
 mysql -u root -p -e "USE market_transactions; SHOW TABLES;"
 ```
 
-应看到 8 张表：`users`, `market_prices`, `published_items`, `ai_audit_logs`, `item_likes`, `hard_cases`, `feature_vectors`, `price_history`
+应看到 7 张表：`users`, `market_prices`, `published_items`, `ai_audit_logs`, `hard_cases`, `feature_vectors`, `price_history`
 
 ---
 
@@ -311,23 +312,168 @@ npm run dev
 
 ```
 Market-transactions/
-├── backend/                    # FastAPI 后端（48 个 Python 文件）
-│   ├── main.py                 #   入口
+│
+├── .gitignore
+├── README.md
+├── run.py                            # 一键启动全部服务
+├── run_weekly_train.bat              # 每周自动训练批处理
+├── yolov8m.pt                        # YOLOv8m 预训练权重 (50MB)
+│
+├── database/
+│   └── schema.sql                    # 7 张表完整建表 + 种子数据
+│
+├── frontend/                         # ── Vue 3 前端 ──
+│   ├── run-frontend.py               # 一键启动前端
+│   ├── index.html
+│   ├── package.json                  # 依赖: vue/vue-router/axios/vite/tailwind
+│   ├── vite.config.js                # Vite 配置 + API 代理
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   └── src/
+│       ├── main.js                   # 入口：路由守卫 + Pinia
+│       ├── App.vue
+│       ├── style.css                 # Tailwind 样式
+│       ├── api/
+│       │   └── index.js              # Axios 封装 + SSE + 所有接口调用
+│       ├── store/
+│       │   └── user.js               # 用户状态管理
+│       ├── components/
+│       │   ├── ImageUploader.vue     # 图片上传（拖拽+点击）
+│       │   ├── ConfirmCard.vue       # 信息确认卡片
+│       │   ├── HistoryCard.vue       # 历史记录卡片
+│       │   └── TypewriterText.vue    # 打字机文案展示
+│       └── views/
+│           ├── HomePage.vue          # 发布页（上传→确认→生成 三步）
+│           ├── LoginPage.vue         # 登录页
+│           ├── RegisterPage.vue      # 注册页
+│           ├── MarketPage.vue        # 商城页（搜索+筛选+列表）
+│           └── HistoryPage.vue       # 发布历史页
+│
+├── backend/                          # ── FastAPI 后端 ──
+│   ├── run-backend.py                # 一键启动后端
+│   ├── .env                          # 环境变量（敏感，不提交）
+│   ├── .env.example                  # 环境变量模板
+│   ├── main.py                       # ★ 应用入口：启动/关闭/中间件/路由挂载
+│   ├── yolov8n.pt                    # YOLOv8n 预训练权重 (6.5MB)
+│   ├── import_seed.py                # 行情种子数据导入
+│   ├── weekly_train.py               # 每周自动训练流水线
+│   ├── crawler.py                    # 爬虫脚本框架
+│   ├── crawl_images.py               # 百度图片爬虫
+│   │
 │   ├── app/
-│   │   ├── routers/            #   9 个路由，17 个端点
-│   │   ├── services/           #   6 个业务服务
-│   │   ├── db/                 #   连接池 + CRUD
-│   │   ├── llm/                #   DeepSeek / Qwen-VL 客户端
-│   │   ├── ml/                 #   YOLOv8 / CLIP / Qdrant
-│   │   ├── middleware/         #   速率限制
-│   │   └── utils/              #   图像处理 / 校验 / 后台任务
-│   └── test/                   #   12 个测试文件
-├── frontend/                   # Vue 3 前端（14 个源文件）
-│   └── src/views/              #   5 个页面
-├── database/schema.sql         # 数据库建表
-├── trainzui/                   # 模型训练脚本
-├── 项目文档/                    # 详细文档
-└── 环境依赖/                    # Python 依赖清单
+│   │   ├── config.py                 # ★ 全局配置管理 (Settings 单例)
+│   │   ├── dependencies.py           # JWT 认证依赖 (get_current_user)
+│   │   │
+│   │   ├── routers/                  # ── 9 个路由模块 ──
+│   │   │   ├── auth.py               # POST /register, /login
+│   │   │   ├── extract.py            # POST /extract (Qwen-VL 识别+双模型比对)
+│   │   │   ├── detect.py             # POST /yolo/detect (YOLO 检测)
+│   │   │   ├── process.py            # POST /process/image (全链路瑕疵检测+定价)
+│   │   │   ├── generate.py           # POST /generate (SSE 流式文案)
+│   │   │   ├── price.py              # GET /price (行情查询)
+│   │   │   ├── history.py            # GET /history, POST /save, /delist, /publish
+│   │   │   ├── market.py             # GET /market (商城列表)
+│   │   │   └── search.py             # POST /search/image, /text, /index (以图搜图)
+│   │   │
+│   │   ├── services/                 # ── 6 个业务服务 ──
+│   │   │   ├── audit_service.py      # LLM 审计日志
+│   │   │   ├── text_service.py       # DeepSeek 文案生成
+│   │   │   ├── price_service.py      # 三层查价匹配
+│   │   │   ├── vision_service.py     # Qwen-VL 响应解析
+│   │   │   ├── damage_detector.py    # YOLO-Seg 损伤分割
+│   │   │   └── image_processor.py    # 图片预处理 (1024px)
+│   │   │
+│   │   ├── db/                       # ── 数据库层 ──
+│   │   │   ├── connection.py         # aiomysql 异步连接池
+│   │   │   └── crud.py               # 完整 CRUD + 批量查询 + 事务
+│   │   │
+│   │   ├── llm/                      # ── 大模型客户端 ──
+│   │   │   ├── base.py               # LLM 抽象基类
+│   │   │   ├── deepseek_client.py    # DeepSeek 文本生成
+│   │   │   ├── deepseek_price_client.py  # DeepSeek 智能定价
+│   │   │   └── qwen_vl_client.py     # Qwen-VL 视觉识别
+│   │   │
+│   │   ├── ml/                       # ── 机器学习模块 ──
+│   │   │   ├── yolo_detector.py      # YOLOv8 通用检测器
+│   │   │   ├── defect_detector_yolo.py   # YOLOv8 瑕疵检测器 (Kaputt 7类)
+│   │   │   ├── clip_extractor.py     # CLIP ViT-B-32 特征提取
+│   │   │   ├── qdrant_client.py      # Qdrant 向量数据库客户端
+│   │   │   ├── data_collector.py     # 错误数据收集器（数据飞轮）
+│   │   │   └── models/
+│   │   │       ├── README.md         # 模型文件说明
+│   │   │       └── __init__.py
+│   │   │
+│   │   ├── middleware/               # ── 中间件 ──
+│   │   │   └── rate_limit.py         # 滑动窗口速率限制
+│   │   │
+│   │   ├── models/                   # ── 数据模型 ──
+│   │   │   └── schemas.py            # 全部 Pydantic 请求/响应模型
+│   │   │
+│   │   └── utils/                    # ── 工具模块 ──
+│   │       ├── preprocess.py         # 图像预处理管道 (448px)
+│   │       ├── image_utils.py        # Base64 / 保存 / 转换
+│   │       ├── file_validator.py     # 文件上传校验（MIME/大小/路径遍历）
+│   │       ├── font_utils.py         # 跨平台中文字体
+│   │       ├── json_utils.py         # 安全 JSON 序列化
+│   │       └── background_tasks.py   # 可靠后台任务管理器
+│   │
+│   ├── test/                         # ── 12 个测试文件 ──
+│   │   ├── conftest.py               # pytest 配置 + fixtures
+│   │   ├── test_auth.py              # 注册/登录
+│   │   ├── test_db.py                # 数据库连接
+│   │   ├── test_extract.py           # Qwen 识别
+│   │   ├── test_detect.py            # YOLO 检测
+│   │   ├── test_process.py           # 瑕疵检测
+│   │   ├── test_search.py            # 以图搜图
+│   │   ├── test_price.py             # 行情查询
+│   │   ├── test_generate.py          # SSE 文案生成
+│   │   ├── test_deepseek.py          # DeepSeek API
+│   │   ├── test_qwen.py              # Qwen API
+│   │   └── test_integration.py       # 完整发布流程 E2E
+│   │
+│   ├── scripts/
+│   │   └── index_items.py            # 批量索引商品到 Qdrant
+│   │
+│   ├── dataset/
+│   │   └── README.md                 # 数据集说明
+│   │
+│   └── static/uploads/               # 用户上传图片存储
+│
+├── trainzui/                         # ── 模型训练 ──
+│   ├── train1/                       # 通用识别模型训练 (COCO)
+│   │   ├── train.py                  # 训练脚本
+│   │   ├── coco2yolo.py              # COCO→YOLO 格式转换
+│   │   ├── prepare_data.py           # 数据准备
+│   │   ├── test_workflow.py          # 训练流程测试
+│   │   ├── setup.bat                 # Windows 环境配置
+│   │   ├── requirements.txt
+│   │   └── dataset/data.yaml         # 数据集配置
+│   │
+│   └── train2/                       # 瑕疵检测模型训练 (Kaputt 7类)
+│       ├── train.py                  # 训练脚本
+│       ├── convert_kaputt.py         # Kaputt 数据格式转换
+│       ├── requirements.txt
+│       ├── 项目结构.md
+│       └── dataset/
+│           ├── data.yaml             # 数据集配置 (7类)
+│           └── datasets/             # Parquet 元数据
+│
+├── 环境依赖/                          # Python 依赖
+│   ├── requirements.txt              # 127 个包完整列表
+│   ├── torchzidong.py                # PyTorch 自动安装脚本
+│   ├── verify_dependencies.py        # 依赖验证
+│
+└── 项目文档/                          # 7 份文档 + 图片
+    ├── 前端设计接口.md               # API 端点详细定义
+    ├── 项目结构说明书.md             # 完整目录树 + 模块说明
+    ├── 数据库结构说明书.md           # 7 张表 ER 设计 + CRUD
+    ├── 核心技术.md
+    ├── 所有技术清单.md               # 全栈技术清单
+    ├── 模型.md                       # ML 模型说明
+    ├── 操作手册.md                   # 使用操作指南
+    ├── 未完成功能.md                 # 待补充功能 + 优先级
+    ├── 版本迭代记录.md               # v0.1～v0.16 完整迭代
+    └── 版本迭代记录.assets/          # 文档截图
 ```
 
 ---
@@ -348,7 +494,7 @@ Market-transactions/
 | 文档 | 内容 |
 |------|------|
 | [前端设计接口](项目文档/前端设计接口.md) | 17 个 API 端点详细定义（请求/响应/错误码） |
-| [数据库结构说明书](项目文档/数据库结构说明书.md) | 8 张表完整设计 |
+| [数据库结构说明书](项目文档/数据库结构说明书.md) | 7 张表完整设计 |
 | [核心技术与设计理念](项目文档/核心技术.md) | 10 项技术的原理+实现讲解 |
 | [操作手册](项目文档/操作手册.md) | 详细操作步骤 |
 | [版本迭代记录](项目文档/版本迭代记录.md) | v0.1～v0.16 开发历史 |

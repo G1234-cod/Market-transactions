@@ -110,7 +110,7 @@ function cancelGenerate() {
 async function doExtract() {
   extracting.value = true
   try {
-    const resp = await extractImage(imageFile.value, userId.value)
+    const resp = await extractImage(imageFile.value)
     if (resp.success && resp.data) {
       extractResult.value = resp.data
       extractResult.value.image_urls = resp.image_urls || []

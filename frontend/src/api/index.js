@@ -27,7 +27,6 @@ export async function login(username, password) {
   const { data } = await api.post('/login', { username, password })
   if (data.access_token) {
     localStorage.setItem('token', data.access_token)
-    localStorage.setItem('user_id', String(data.user_id))
   }
   return data
 }
@@ -40,14 +39,11 @@ export async function register(username, password) {
 // ============================================================
 // 图片提取
 // ============================================================
-export async function extractImage(file, userId = 1) {
+export async function extractImage(file) {
   const form = new FormData()
   form.append('image', file)
-  form.append('user_id', String(userId))
   const { data } = await api.post('/extract', form, {
-    headers: {
-      ...getAuthHeaders(),
-    }
+    headers: { ...getAuthHeaders() }
   })
   return data
 }
@@ -183,11 +179,28 @@ export async function publishItem(id) {
 }
 
 // ============================================================
-// 商城
+// 商城（分页 + 排序 + 多维筛选）
 // ============================================================
-export async function getMarket(keyword = '', category = '') {
-  const { data } = await api.get('/market', { params: { keyword, category } })
-  return data.items || []
+export async function getMarket({
+  keyword = '',
+  category = '',
+  condition = '',
+  priceMin = null,
+  priceMax = null,
+  sortBy = 'created_at',
+  sortOrder = 'desc',
+  page = 1,
+  pageSize = 20,
+} = {}) {
+  const params = { page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder }
+  if (keyword) params.keyword = keyword
+  if (category) params.category = category
+  if (condition) params.condition = condition
+  if (priceMin != null) params.price_min = priceMin
+  if (priceMax != null) params.price_max = priceMax
+
+  const { data } = await api.get('/market', { params })
+  return data   // { total, page, page_size, total_pages, items }
 }
 
 // ============================================================
@@ -217,7 +230,6 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
-      localStorage.removeItem('user_id')
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }

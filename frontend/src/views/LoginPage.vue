@@ -97,7 +97,7 @@ async function doLogin() {
   try {
     const user = await apiLogin(username.value.trim(), password.value)
     login(user)
-    router.push('/')
+    router.push('/home')
   } catch (e) {
     error.value = e?.response?.data?.detail || '登录失败，请重试'
   } finally {
