@@ -8,6 +8,7 @@ import io
 import uuid
 import os
 import logging
+import threading
 from datetime import datetime
 
 from app.ml.defect_detector_yolo import DefectDetector
@@ -28,20 +29,30 @@ router = APIRouter(tags=["图片处理"])
 
 _detector = None
 _price_client = None
+_detector_lock = threading.Lock()
+_price_client_lock = threading.Lock()
 
 
 def get_detector():
     global _detector
-    if _detector is None:
+    if _detector is not None:
+        return _detector
+    with _detector_lock:
+        if _detector is not None:
+            return _detector
         _detector = DefectDetector()
-    return _detector
+        return _detector
 
 
 def get_price_client():
     global _price_client
-    if _price_client is None:
+    if _price_client is not None:
+        return _price_client
+    with _price_client_lock:
+        if _price_client is not None:
+            return _price_client
         _price_client = DeepSeekPriceClient()
-    return _price_client
+        return _price_client
 
 
 @router.post("/process/image")
@@ -49,9 +60,9 @@ async def process_image(
     image: UploadFile = File(...),
     user_id: int = Depends(get_current_user),
     item_id: Optional[int] = Form(default=None),
-    category: str = Form(default="手机"),
-    brand: str = Form(default="Apple"),
-    model: str = Form(default="iPhone 14 Pro"),
+    category: str = Form(default=""),
+    brand: str = Form(default=""),
+    model: str = Form(default=""),
     rate: None = Depends(create_rate_limit(30, 60)),  # 全链路处理: 30次/分钟
 ):
     """

@@ -3,7 +3,7 @@
 自动检测GPU/CPU，支持断点续训
 
 用法:
-    cd D:\train-defect
+    cd trainzui/train2
     python convert_kaputt.py --max-gb 1.0   # 先转换（随机选1GB）
     python train.py                          # 训练
 

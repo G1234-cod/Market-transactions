@@ -14,13 +14,17 @@ from app.config import settings
 # 密码哈希（PBKDF2，与 crud.py 一致）
 # ============================================================
 
-def hash_password(password: str, iterations: int = 100000) -> str:
+# ✅ 修复：OWASP 2026 建议 PBKDF2-SHA256 至少 600,000 次迭代
+_PBKDF2_ITERATIONS = 600_000
+_OLD_ITERATIONS = 100_000
+
+def hash_password(password: str, iterations: int = _PBKDF2_ITERATIONS) -> str:
     """
-    PBKDF2 哈希密码（与 crud.py 一致）
+    PBKDF2 哈希密码
 
     Args:
         password: 明文密码
-        iterations: 迭代次数
+        iterations: 迭代次数（默认 600,000）
 
     Returns:
         str: salt:hash 格式
@@ -32,7 +36,7 @@ def hash_password(password: str, iterations: int = 100000) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    验证密码（与 crud.py 一致）
+    验证密码（兼容旧哈希）
 
     Args:
         plain_password: 明文密码
@@ -44,7 +48,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         salt_hex, hash_hex = hashed_password.split(":", 1)
         salt = bytes.fromhex(salt_hex)
-        h = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt, 100000)
+        # 先用新迭代数试
+        h = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt, _PBKDF2_ITERATIONS)
+        if h.hex() == hash_hex:
+            return True
+        # 兼容旧数据
+        h = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt, _OLD_ITERATIONS)
         return h.hex() == hash_hex
     except (ValueError, AttributeError):
         return False
@@ -62,8 +71,7 @@ def create_access_token(
     创建 JWT Token
 
     Args:
-        data: 要编码的数据（必须包含 sub 字段）
-        expires_delta: 过期时间（可选）
+        data: 要编码的数据（必须包含 sub 字段；建议包含 role 字段）
 
     Returns:
         str: JWT Token
@@ -77,7 +85,12 @@ def create_access_token(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
-    to_encode.update({"exp": expire})
+    # ✅ 添加标准 JWT claims：iat（签发时间）、exp（过期时间）
+    now = datetime.now(timezone.utc)
+    to_encode.update({
+        "iat": now,
+        "exp": expire,
+    })
     encoded_jwt = jwt.encode(
         to_encode,
         settings.SECRET_KEY,

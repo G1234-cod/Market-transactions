@@ -5,6 +5,7 @@
 import os
 import json
 import asyncio
+import threading
 from datetime import datetime
 from pathlib import Path
 from PIL import Image
@@ -397,18 +398,27 @@ class DataCollector:
 
 
 # ============================================================
-# 全局单例
+# 全局单例（线程安全）
 # ============================================================
 
 _data_collector: Optional[DataCollector] = None
+_data_collector_lock = threading.Lock()
 
 
 def get_data_collector() -> DataCollector:
-    """获取数据收集器单例"""
+    """获取数据收集器单例（线程安全）"""
     global _data_collector
-    if _data_collector is None:
+
+    # ✅ 快速路径（无锁）
+    if _data_collector is not None:
+        return _data_collector
+
+    # ✅ 慢速路径（有锁，双重检查）
+    with _data_collector_lock:
+        if _data_collector is not None:
+            return _data_collector
         _data_collector = DataCollector()
-    return _data_collector
+        return _data_collector
 
 
 def reset_data_collector():

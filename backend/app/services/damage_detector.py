@@ -1,14 +1,17 @@
 """YOLO损伤检测服务"""
 import os
 import uuid
+import logging
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
 
 import cv2
 import numpy as np
 
 from app.models.schemas import DamageRegion, DAMAGE_COLORS
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class DamageDetector:
@@ -34,7 +37,8 @@ class DamageDetector:
     }
 
     _instance: Optional['DamageDetector'] = None
-    _model: Optional[any] = None
+    _model: Optional[Any] = None
+    _initialized: bool = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -42,25 +46,28 @@ class DamageDetector:
         return cls._instance
 
     def __init__(self):
-        self._load_model()
+        # ✅ 修复：防止每次 DamageDetector() 都重新加载模型
+        if not self._initialized:
+            self._load_model()
+            self._initialized = True
 
     def _load_model(self):
         """加载YOLOv8模型"""
         if self._model is None:
             try:
                 from ultralytics import YOLO
-                
+
                 if os.path.exists(self.MODEL_PATH):
                     self._model = YOLO(self.MODEL_PATH)
-                    print(f"✅ 加载损伤检测模型成功: {self.MODEL_PATH}")
+                    logger.info(f"✅ 加载损伤检测模型成功: {self.MODEL_PATH}")
                 else:
-                    print(f"⚠️ 警告: 模型文件不存在: {self.MODEL_PATH}")
-                    print("请先运行 train_damage.py 训练模型")
+                    logger.warning(f"⚠️ 警告: 模型文件不存在: {self.MODEL_PATH}")
+                    logger.warning("请先运行 train_damage.py 训练模型")
                     self._model = None
-                    
+
             except ImportError:
-                print("❌ 错误: ultralytics 未安装")
-                print("请运行: pip install ultralytics")
+                logger.error("❌ 错误: ultralytics 未安装")
+                logger.error("请运行: pip install ultralytics")
                 self._model = None
 
     def detect(

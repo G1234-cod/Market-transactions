@@ -1,10 +1,10 @@
 <template>
   <div class="glass-card overflow-hidden">
-    <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
+  <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50">
       <div class="flex items-center gap-3">
         <div class="relative">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-amber-500/30">✎</div>
-          <div class="absolute -inset-1 bg-gradient-to-br from-amber-400/40 to-orange-400/40 rounded-xl blur-lg opacity-40 -z-10"></div>
+          <div class="w-10 h-10 rounded-xl gradient-amber flex items-center justify-center text-space text-sm font-bold shadow-lg shadow-amber-500/30">✎</div>
+          <div class="absolute -inset-1 bg-gradient-to-br from-amber-500/40 to-orange-500/40 rounded-xl blur-lg opacity-40 -z-10"></div>
         </div>
         <div>
           <h3 class="font-semibold text-text-primary">确认商品信息</h3>
@@ -71,28 +71,141 @@
           />
           <p v-if="fieldMsg('condition')" class="text-xs mt-1 ml-1 text-danger-500">{{ fieldMsg('condition') }}</p>
         </div>
+
       </div>
 
-      <div v-if="priceInfo && priceInfo.matched" class="rounded-xl overflow-hidden">
-        <div class="bg-gradient-to-r from-accent-50 via-accent-50/50 to-accent-100/50 border border-accent-200 px-4 py-4">
+      <!-- ✅ AI 定价（独立区块，系统自动生成，仅供展示） -->
+      <div class="rounded-xl overflow-hidden border-2 border-dashed border-primary-500/30 bg-gradient-to-br from-primary-500/10 to-accent-500/10">
+        <div class="px-5 py-4">
           <div class="flex items-center justify-between mb-3">
-            <span class="text-xs text-accent-700 font-medium flex items-center gap-1.5">
+            <span class="text-xs text-primary-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span>🤖</span> AI 智能定价
+            </span>
+            <span class="text-[10px] text-primary-400 bg-primary-500/20 px-2 py-0.5 rounded-full">系统自动生成</span>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-3xl font-extrabold text-amber-400">¥{{ (extractResult.suggested_price || 0).toLocaleString() }}</span>
+            <span class="text-xs text-primary-400">/ 建议售价</span>
+          </div>
+          <p v-if="extractResult.price_reasoning" class="text-xs text-primary-400 mt-2 italic">"{{ extractResult.price_reasoning }}"</p>
+        </div>
+      </div>
+
+      <!-- ✅ 用户手动定价（完全独立的区块） -->
+      <div class="rounded-xl border border-border/50 bg-space-lighter/30 p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-text-primary font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <span>✏️</span> 你的售价
+          </span>
+          <span class="text-[10px] text-text-muted bg-space-card px-2 py-0.5 rounded-full">手动输入</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="relative flex-1">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-lg">¥</span>
+            <input
+              id="user-price"
+              v-model.number="local.user_price"
+              type="number"
+              min="0"
+              max="9999999"
+              step="1"
+              placeholder="输入你的卖价"
+              class="w-full pl-9 pr-4 py-3 bg-space-card border border-border rounded-xl text-lg font-bold text-text-primary placeholder:text-text-muted focus:bg-space-card focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/10 focus:outline-none transition-all"
+              autocomplete="off"
+            />
+          </div>
+          <!-- 历史价格按钮 -->
+          <button
+            v-if="local.brand && local.model"
+            @click="goToPriceHistory"
+            class="flex-shrink-0 px-4 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-accent-500 to-success-500 text-white shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 hover:from-accent-600 hover:to-success-600 transition-all flex items-center gap-1.5 ripple-container"
+            title="查看该商品历史价格走势"
+          >
+            <span>📊</span> 历史价格
+          </button>
+        </div>
+        <p class="text-[11px] text-text-muted">此价格将展示在商城中，AI 价格仅供你参考</p>
+      </div>
+
+      <div v-if="extractResult.annotated_url" class="rounded-xl overflow-hidden border border-border/50">
+        <div class="bg-gradient-to-r from-danger-500/10 to-amber-500/10 px-4 py-3 border-b border-border/50">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-danger-400 font-medium flex items-center gap-1.5">
+            <span>🔍</span> 瑕疵检测结果
+          </span>
+            <div class="flex items-center gap-3">
+              <span v-if="extractResult.defect_count" class="text-xs text-danger-400">
+                发现 {{ extractResult.defect_count }} 处瑕疵
+              </span>
+              <!-- ✅ R4: 成色分级标签 -->
+              <span v-if="extractResult.condition_grade" class="text-xs font-bold px-2 py-0.5 rounded-full"
+                :class="conditionGradeClass">
+                {{ extractResult.condition_grade.grade_label }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 flex justify-center bg-space-lighter/30">
+                  <img :src="extractResult.annotated_url" alt="瑕疵标注图" class="max-h-64 rounded-lg object-contain" />
+                </div>
+        <!-- ✅ 5级成色程度 —— 瑕疵底部独立一行 -->
+        <div v-if="extractResult.condition_grade" class="px-4 py-3 border-t border-border flex items-center justify-between"
+          :class="conditionGradeBgClass">
+          <span class="text-sm font-bold">成色程度</span>
+          <span class="text-lg font-extrabold" :class="conditionGradeTextClass">
+            {{ extractResult.condition_grade.grade_label }}
+          </span>
+        </div>
+      </div>
+
+      <!-- ✅ R5: 市场行情参考 -->
+      <div v-if="priceInfo && priceInfo.matched" class="rounded-xl overflow-hidden">
+        <div class="bg-gradient-to-r from-accent-500/10 via-accent-500/10 to-primary-500/10 border border-accent-500/20 px-4 py-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs text-accent-400 font-medium flex items-center gap-1.5">
               <span>📊</span> 市场行情参考
             </span>
-            <span class="text-xs text-accent-600">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
+            <span class="text-xs text-accent-400">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
           </div>
           <div class="flex items-end gap-6">
             <div>
-              <p class="text-xs text-accent-600">均价</p>
-              <p class="text-2xl font-bold text-accent-700">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
+              <p class="text-xs text-accent-400">均价</p>
+              <p class="text-2xl font-bold text-amber-400">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
             </div>
             <div class="flex-1 pb-1.5">
-              <div class="flex justify-between text-[10px] text-accent-500/70 mb-0.5">
+              <div class="flex justify-between text-[10px] text-text-muted mb-0.5">
                 <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
                 <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
               </div>
-              <div class="relative h-2.5 bg-accent-200/50 rounded-full overflow-hidden">
-                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-accent-300 rounded-full transition-all duration-700"
+              <div class="relative h-2.5 bg-accent-500/20 rounded-full overflow-hidden">
+                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-primary-400 rounded-full transition-all duration-700"
+                  :style="{ left: lowPct + '%', width: rangePct + '%' }" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="priceInfo && priceInfo.matched && !local.suggested_price" class="rounded-xl overflow-hidden">
+        <div class="bg-gradient-to-r from-accent-500/10 via-accent-500/10 to-primary-500/10 border border-accent-500/20 px-4 py-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs text-accent-400 font-medium flex items-center gap-1.5">
+              <span>📊</span> 市场行情参考
+            </span>
+            <span class="text-xs text-accent-400">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
+          </div>
+          <div class="flex items-end gap-6">
+            <div>
+              <p class="text-xs text-accent-400">均价</p>
+              <p class="text-2xl font-bold text-amber-400">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
+            </div>
+            <div class="flex-1 pb-1.5">
+              <div class="flex justify-between text-[10px] text-text-muted mb-0.5">
+                <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
+                <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
+              </div>
+              <div class="relative h-2.5 bg-accent-500/20 rounded-full overflow-hidden">
+                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-primary-400 rounded-full transition-all duration-700"
                   :style="{ left: lowPct + '%', width: rangePct + '%' }" />
               </div>
             </div>
@@ -100,19 +213,19 @@
         </div>
       </div>
       <div v-else-if="priceInfo && !priceInfo.matched"
-        class="rounded-xl bg-warning-50 border border-warning-200 px-4 py-3 text-sm text-warning-700 flex items-start gap-2">
+        class="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm text-amber-400 flex items-start gap-2">
         <span class="text-lg">💡</span>
         <span>暂无该型号的市场行情，AI 将根据经验生成建议价</span>
       </div>
 
-      <div v-if="warnings.length" class="rounded-xl bg-warning-50 border border-warning-200 px-4 py-3 text-xs space-y-1">
-        <p class="text-warning-700 font-medium flex items-center gap-1.5"><span>⚠️</span> 温馨提示：</p>
-        <ul class="list-disc list-inside space-y-0.5 text-warning-600">
+      <div v-if="warnings.length" class="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-xs space-y-1">
+        <p class="text-amber-400 font-medium flex items-center gap-1.5"><span>⚠️</span> 温馨提示：</p>
+        <ul class="list-disc list-inside space-y-0.5 text-amber-400">
           <li v-for="m in warnings" :key="m">{{ m }}</li>
         </ul>
       </div>
 
-      <div v-if="errors.length" class="rounded-xl bg-danger-50 border border-danger-200 px-4 py-3 text-xs text-danger-600 space-y-1" role="alert" aria-live="polite">
+      <div v-if="errors.length" class="rounded-xl bg-danger-500/10 border border-danger-500/30 px-4 py-3 text-xs text-danger-400 space-y-1" role="alert" aria-live="polite">
         <p class="font-medium">请修正以下问题后重试：</p>
         <ul class="list-disc list-inside space-y-0.5">
           <li v-for="m in errors" :key="m">{{ m }}</li>
@@ -121,10 +234,10 @@
 
       <div class="flex gap-3 pt-2">
         <button
-          class="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          class="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ripple-container"
           :class="canPublish && !loading
             ? 'gradient-primary shadow-lg shadow-primary-500/30 hover:shadow-xl hover:shadow-primary-500/40 hover:from-primary-600 hover:via-primary-500 hover:to-accent-600 transform hover:-translate-y-0.5 active:translate-y-0'
-            : 'bg-gray-400'"
+            : 'bg-text-muted/30'"
           :disabled="!canPublish || loading"
           @click="$emit('confirm', local)"
         >
@@ -133,10 +246,10 @@
         </button>
 
         <button
-          class="px-6 py-3.5 rounded-xl font-medium border transition-all flex items-center gap-2"
+          class="px-6 py-3.5 rounded-xl font-medium border transition-all flex items-center gap-2 ripple-container"
           :class="canSaveDraft
-            ? 'text-primary-600 border-primary-200 hover:bg-primary-50 hover:border-primary-300'
-            : 'text-text-muted border-border cursor-not-allowed'"
+            ? 'text-primary-400 border-primary-500/30 hover:bg-primary-500/10 hover:border-primary-500/50'
+            : 'text-text-muted border-border/50 cursor-not-allowed'"
           :disabled="!canSaveDraft || loading"
           @click="$emit('saveDraft', local)"
           aria-label="保存草稿"
@@ -150,6 +263,9 @@
 
 <script setup>
 import { reactive, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const props = defineProps({
   extractResult: { type: Object, default: () => ({}) },
@@ -158,12 +274,52 @@ const props = defineProps({
 })
 defineEmits(['confirm', 'saveDraft'])
 
-const local = reactive({ category: '', brand: '', model: '', condition: '' })
-watch(() => props.extractResult, (v) => { if (v) Object.assign(local, v) }, { immediate: true })
+const local = reactive({
+  category: '',
+  brand: '',
+  model: '',
+  condition: '',
+  title: '',
+  description: '',
+  suggested_price: 0,   // AI 生成的建议价（来自 extractResult，只读展示）
+  user_price: 0,         // 用户手动输入的售价（绑定到 input）
+  price_reasoning: '',
+  selling_points: [],
+  image_urls: [],
+  annotated_url: '',
+  defect_count: 0,
+  condition_grade: null,
+})
+watch(() => props.extractResult, (v) => {
+  if (v) {
+    // ✅ 修复：显式赋值替代 Object.assign，防止意外属性注入
+    local.category = v.category || ''
+    local.brand = v.brand || ''
+    local.model = v.model || ''
+    local.condition = v.condition || ''
+    local.title = v.title || ''
+    local.description = v.description || ''
+    local.price_reasoning = v.price_reasoning || ''
+    local.selling_points = v.selling_points || []
+    local.image_urls = v.image_urls || []
+    local.annotated_url = v.annotated_url || ''
+    local.defect_count = v.defect_count || 0
+    local.condition_grade = v.condition_grade || null
+    // ✅ AI 定价始终来自后端（只读展示，不绑定到用户价格）
+    local.suggested_price = parseFloat(v.suggested_price) || 0
+    // ✅ 用户价格完全独立，不自动填入 AI 定价
+  }
+}, { immediate: true })
 
-function validateField(value, fieldName, maxLen = 100) {
-  const mandatory = fieldName.startsWith('品牌') || fieldName.startsWith('型号')
-  if (!value) return mandatory ? { level: 'error', msg: `请填写${fieldName}` } : null
+function goToPriceHistory() {
+  const price = local.suggested_price || props.priceInfo?.avg_price || 0
+  router.push(
+    `/price-history?brand=${encodeURIComponent(local.brand)}&model=${encodeURIComponent(local.model)}&price=${price}`
+  )
+}
+
+function validateField(value, fieldName, maxLen = 100, required = false) {
+  if (!value) return required ? { level: 'error', msg: `请填写${fieldName}` } : null
   if (value.length < 2) return { level: 'error', msg: `${fieldName}至少 2 个字符` }
   if (value.length > maxLen) return { level: 'error', msg: `${fieldName}不能超过 ${maxLen} 个字符` }
   if (/^(.)\1{3,}$/.test(value)) return { level: 'error', msg: `${fieldName}不能全是重复字符` }
@@ -208,8 +364,8 @@ function validateModel(value) {
 }
 
 const fields = computed(() => {
-  const b = validateField(local.brand || '', '品牌', 50) || { level: 'ok', msg: '' }
-  const m = validateField(local.model || '', '型号', 100) || { level: 'ok', msg: '' }
+  const b = validateField(local.brand || '', '品牌', 50, true) || { level: 'ok', msg: '' }
+  const m = validateField(local.model || '', '型号', 100, true) || { level: 'ok', msg: '' }
   const c = local.category ? validateField(local.category, '品类') : null
   const cond = local.condition ? validateField(local.condition, '成色描述', 200) : null
 
@@ -221,7 +377,7 @@ const fields = computed(() => {
   }
 })
 
-const errors   = computed(() => Object.entries(fields.value).filter(([,v]) => v && v.level === 'error').map(([k,v]) => ({ [k]: v.msg })))
+const errors   = computed(() => Object.entries(fields.value).filter(([,v]) => v && v.level === 'error').map(([,v]) => v.msg))
 const warnings = computed(() => Object.entries(fields.value).filter(([,v]) => v && v.level === 'warn').map(([,v]) => v.msg))
 const canPublish = computed(() => errors.value.length === 0 && local.brand && local.model)
 const canSaveDraft = computed(() => local.brand || local.model || local.category)
@@ -251,4 +407,42 @@ const lowPct = computed(() => {
   return Math.max(0, ((props.priceInfo.avg_price - props.priceInfo.low_price) / range) * 80)
 })
 const rangePct = computed(() => 20)
+
+const priceBorderClass = computed(() => {
+  if (!local.suggested_price || local.suggested_price <= 0) return ''
+  return 'focus:border-accent-400 focus:ring-accent-100'
+})
+
+// ✅ R4: 成色分级颜色映射（小标签用）
+const conditionGradeClass = computed(() => {
+  const grade = props.extractResult?.condition_grade?.grade
+  if (grade === 0) return 'bg-green-100 text-green-700'
+  if (grade === 1) return 'bg-yellow-100 text-yellow-700'
+  if (grade === 2) return 'bg-orange-100 text-orange-700'
+  if (grade === 3) return 'bg-red-100 text-red-700'
+  if (grade === 4) return 'bg-red-200 text-red-800'
+  return 'bg-gray-100 text-gray-600'
+})
+
+// ✅ R4: 成色程度底部背景色
+const conditionGradeBgClass = computed(() => {
+  const grade = props.extractResult?.condition_grade?.grade
+  if (grade === 0) return 'bg-green-50'
+  if (grade === 1) return 'bg-yellow-50'
+  if (grade === 2) return 'bg-orange-50'
+  if (grade === 3) return 'bg-red-50'
+  if (grade === 4) return 'bg-red-100'
+  return 'bg-gray-50'
+})
+
+// ✅ R4: 成色程度底部文字颜色
+const conditionGradeTextClass = computed(() => {
+  const grade = props.extractResult?.condition_grade?.grade
+  if (grade === 0) return 'text-green-700'
+  if (grade === 1) return 'text-yellow-700'
+  if (grade === 2) return 'text-orange-700'
+  if (grade === 3) return 'text-red-700'
+  if (grade === 4) return 'text-red-800'
+  return 'text-gray-600'
+})
 </script>

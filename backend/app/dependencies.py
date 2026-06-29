@@ -39,22 +39,24 @@ async def get_current_user(
     """
     token = credentials.credentials
     user_id = get_user_id_from_token(token)
-    
+
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的认证凭证",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # 验证用户是否存在
+
+    # ✅ 验证用户仍存在于数据库中（主键查询，性能影响极小）
+    # 防止已删除/禁用的用户继续使用未过期的 JWT
     user = await crud.get_user_by_id(user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在",
+            detail="用户不存在或已被删除",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     return user_id
 
 
@@ -83,12 +85,38 @@ async def get_current_user_optional(
     
     token = credentials.credentials
     user_id = get_user_id_from_token(token)
-    
+
     if user_id is None:
         return None
+
+    # ✅ 修复：移除冗余 DB 查询，JWT 已验证即可信任
+    return user_id
+
+
+# ============================================================
+# 管理员权限依赖
+# ============================================================
+
+async def get_current_admin(
+    user_id: int = Depends(get_current_user)
+) -> int:
+    """
+    获取当前管理员用户的 ID（强制认证 + 权限检查）
     
-    user = await crud.get_user_by_id(user_id)
-    if user is None:
-        return None
+    所有管理员专用接口都应该使用此依赖项
+    
+    Returns:
+        int: 当前管理员用户 ID
+    
+    Raises:
+        HTTPException: 403 权限不足（非管理员）
+    """
+    role = await crud.get_user_role(user_id)
+    
+    if role != 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足：仅管理员可访问此接口",
+        )
     
     return user_id

@@ -20,7 +20,8 @@ async def register(payload: RegisterRequest, rate: None = Depends(create_rate_li
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="密码至少 6 位")
 
-    ok, uid, msg = await crud.register_user(username, password)
+    role = getattr(payload, 'role', 'user') or 'user'
+    ok, uid, msg = await crud.register_user(username, password, role)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     
@@ -38,12 +39,12 @@ async def login(payload: LoginRequest, rate: None = Depends(create_rate_limit(10
     username = payload.username.strip()
     password = payload.password
 
-    ok, uid, msg = await crud.authenticate_user(username, password)
+    ok, uid, msg, role = await crud.authenticate_user(username, password)
     if not ok:
         raise HTTPException(status_code=401, detail=msg)
     
-    # ✅ 生成 JWT Token
-    access_token = create_access_token(data={"sub": str(uid)})
+    # ✅ 生成 JWT Token（包含 role，便于权限验证和审计）
+    access_token = create_access_token(data={"sub": str(uid), "role": role})
     
     return LoginResponse(
         success=True,
@@ -51,5 +52,6 @@ async def login(payload: LoginRequest, rate: None = Depends(create_rate_limit(10
         token_type="bearer",
         user_id=uid,
         username=username,
+        role=role,
         message="登录成功"
     )

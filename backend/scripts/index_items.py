@@ -5,6 +5,11 @@ import asyncio
 import sys
 import os
 
+# ✅ 修复 Windows GBK 编码问题：强制 stdout/stderr 使用 UTF-8
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import requests
@@ -239,6 +244,27 @@ async def show_stats():
     print("=" * 70)
 
 
+def _run_async(coro):
+    """
+    运行异步函数并确保资源正确释放
+
+    解决 Windows Python 3.11 上 aiomysql 连接在事件循环关闭后被 GC
+    导致的 "Event loop is closed" 警告。
+    """
+    async def _runner():
+        try:
+            return await coro
+        finally:
+            # ✅ 在事件循环关闭前主动释放数据库连接池
+            from app.db.connection import close_pool
+            try:
+                await close_pool()
+            except Exception:
+                pass
+
+    return asyncio.run(_runner())
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Qdrant 以图搜图索引管理')
@@ -246,14 +272,14 @@ if __name__ == '__main__':
     parser.add_argument('--id', type=int, help='索引指定ID的商品')
     parser.add_argument('--clear', action='store_true', help='清空索引')
     parser.add_argument('--stats', action='store_true', help='显示统计信息')
-    
+
     args = parser.parse_args()
-    
+
     if args.clear:
-        asyncio.run(clear_index())
+        _run_async(clear_index())
     elif args.stats:
-        asyncio.run(show_stats())
+        _run_async(show_stats())
     elif args.id:
-        asyncio.run(index_single_item(args.id))
+        _run_async(index_single_item(args.id))
     else:
-        asyncio.run(index_all_items())
+        _run_async(index_all_items())

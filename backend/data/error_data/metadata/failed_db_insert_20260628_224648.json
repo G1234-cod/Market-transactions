@@ -1,0 +1,9 @@
+{
+  "image_url": "data\\error_data\\images\\item_-1_20260628_224641.jpg",
+  "wrong_label": "cup",
+  "correct_label": "外设",
+  "user_id": 2,
+  "item_id": -1,
+  "error": "(1054, \"Unknown column 'retry_count' in 'field list'\")",
+  "timestamp": "2026-06-28T22:46:48.458244"
+}

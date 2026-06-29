@@ -5,6 +5,7 @@ from ultralytics import YOLO
 from PIL import Image, ImageDraw
 import torch
 import logging
+import threading
 from pathlib import Path
 import base64
 import io
@@ -71,12 +72,11 @@ class YOLODetector:
             self.model_path = str(default_path)
             return YOLO(str(default_path))
         
-        # 4. 回退到预训练模型
-        from app.config import settings as _settings
-        pretrained = _settings.YOLO_PRETRAINED_PATH
-        logger.warning(f"⚠️ 未找到模型文件，使用预训练模型 {pretrained}")
-        self.model_path = pretrained
-        return YOLO(pretrained)
+        # 4. ✅ 修复：不再回退到 COCO 预训练模型
+        # COCO 模型无法识别电子产品品类，会产生完全错误的识别结果
+        # 如果没有自定义模型，直接报错回退到 Qwen-VL
+        logger.error(f"❌ 未找到任何有效的 YOLO 模型文件，无法进行分类检测")
+        return None
     
     def detect(
         self,
@@ -243,10 +243,11 @@ class YOLODetector:
 
 
 # ============================================================
-# 单例实例（懒加载）
+# 单例实例（懒加载，线程安全）
 # ============================================================
 
 _detector: Optional[YOLODetector] = None
+_detector_lock = threading.Lock()
 
 
 def get_yolo_detector(
@@ -254,22 +255,30 @@ def get_yolo_detector(
     conf_threshold: float = 0.5
 ) -> YOLODetector:
     """
-    获取 YOLO 检测器单例
-    
+    获取 YOLO 检测器单例（线程安全）
+
     Args:
         model_path: 模型路径（仅首次调用时生效）
         conf_threshold: 置信度阈值（仅首次调用时生效）
-    
+
     Returns:
         YOLODetector 实例
     """
     global _detector
-    if _detector is None:
+
+    # ✅ 快速路径（无锁）
+    if _detector is not None:
+        return _detector
+
+    # ✅ 慢速路径（有锁，双重检查）
+    with _detector_lock:
+        if _detector is not None:
+            return _detector
         _detector = YOLODetector(
             model_path=model_path,
             conf_threshold=conf_threshold
         )
-    return _detector
+        return _detector
 
 
 # ============================================================

@@ -69,6 +69,8 @@ async def get_market(
             ai_generated_desc=r.get("ai_generated_desc"),
             suggested_price=float(r["suggested_price"]) if r.get("suggested_price") is not None else None,
             category=r.get("category"),
+            brand=r.get("brand"),
+            model=r.get("model"),
             condition=r.get("condition"),
             views=r.get("views", 0),
             created_at=str(r["created_at"]),

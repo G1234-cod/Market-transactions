@@ -37,8 +37,29 @@
       </div>
     </div>
 
-    <div v-else class="relative inline-block group">
-      <div class="relative">
+    <div v-if="!previewUrl" class="space-y-4 transition-all duration-300" :class="dragOver ? 'opacity-0' : 'opacity-100'">
+      <div class="relative inline-block">
+        <div class="absolute -inset-6 bg-gradient-to-br from-primary-500/30 to-purple-500/30 rounded-2xl blur-lg -z-10 group-hover:animate-pulse-glow"></div>
+        <div class="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-primary-800/90 to-primary-700/90 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform duration-300">
+          <span class="text-5xl animate-float">📷</span>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <p class="text-primary-200 font-semibold text-base">拖拽图片到此处，或点击上传</p>
+        <p class="text-xs text-primary-400">支持 JPG / PNG，单张最大 10MB，自动压缩</p>
+      </div>
+      <div class="flex justify-center gap-4 text-xs text-primary-500">
+        <span class="flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> 安全加密
+        </span>
+        <span class="flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> AI 识别
+        </span>
+      </div>
+    </div>
+
+    <div v-else class="relative inline-block group/image">
+      <div class="relative overflow-hidden rounded-2xl">
         <img 
           :src="previewUrl" 
           class="max-h-80 max-w-full rounded-xl shadow-lg object-contain bg-white" 
@@ -61,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, watch, defineEmits, defineProps } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({ modelValue: { type: File, default: null } })
 const emit = defineEmits(['update:modelValue'])
@@ -83,14 +104,20 @@ function handleDrop(e) {
 
 async function processFile(file) {
   if (!file.type.startsWith('image/')) return
-  
+
   compressing.value = true
-  
+
+  // ✅ 修复：释放旧的 Object URL 防止内存泄漏
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+
   try {
     const compressed = await compressImage(file)
     previewUrl.value = URL.createObjectURL(compressed)
     emit('update:modelValue', compressed)
-  } catch {
+  } catch (err) {
+    console.warn('图片压缩失败，使用原始文件:', err)
     previewUrl.value = URL.createObjectURL(file)
     emit('update:modelValue', file)
   } finally {
@@ -141,6 +168,10 @@ function clearImage() {
 watch(() => props.modelValue, (file) => {
   if (file && !previewUrl.value) {
     previewUrl.value = URL.createObjectURL(file)
+  } else if (!file && previewUrl.value) {
+    // ✅ 修复：prop 置空时清预览
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
   }
 })
 </script>

@@ -1,34 +1,111 @@
-"""查价引擎 —— 三层匹配策略 + 爬虫支持"""
-import logging
-import asyncio
-import concurrent.futures
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+"""
+查价引擎 —— 三层匹配策略
 
-from app.models.schemas import PriceResult, PriceDetailResult, CrawledItem, PriceHistoryItem
+1. 第一层：数据库缓存 (Cache)
+   - 检查24小时内是否有人查过同款商品
+   - 命中缓存 → 毫秒级返回，省去爬虫费用
+
+2. 第二层：实时爬虫 (Crawler)
+   - 缓存未命中或过期 → 触发爬虫模块
+   - 通过 OneBound API 实时抓取全网最低价/最高价/均价
+   - 落库更新缓存 + 记录历史快照
+
+3. 第三层：AI 历史数据推算 (AI Estimator)
+   - 历史记录不足时 → 调用 DeepSeek 推算过去6个月价格走势
+   - 基于"二手电子产品每月贬值 3%-8%"的市场规律
+"""
+import logging
+from datetime import datetime
+
+from app.models.schemas import PriceResult
 from app.db import crud
-from app.crawler import create_crawler_manager, format_keyword, is_cache_valid
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-CACHE_TTL_HOURS = 24
-
-
 async def query_price(brand: str, model_name: str) -> PriceResult:
-    """查询行情，返回 PriceResult（快速估算）"""
+    """
+    查询行情 —— 三层匹配策略入口
+
+    流程:
+    1. 检查数据库缓存（24h 内）
+    2. 缓存过期/不存在 → 爬虫实时抓取
+    3. 爬虫失败/未配置 → 回退到已有的数据库记录
+    """
+    cache_ttl = settings.CRAWL_CACHE_TTL
+
+    # ============================================================
+    # 第一层：数据库缓存
+    # ============================================================
+    cached = await crud.get_cached_price(brand, model_name, ttl_seconds=cache_ttl)
+    if cached:
+        logger.info(f"✅ 缓存命中: {brand} {model_name} (缓存 {cached['age_hours']} 小时)")
+        return PriceResult(
+            category=cached.get("category", ""),
+            brand=brand,
+            model=model_name,
+            avg_price=cached["avg_price"],
+            low_price=cached["low_price"],
+            high_price=cached["high_price"],
+            matched=True,
+            note=f"缓存命中（{cached['age_hours']}小时前更新，来源: {cached.get('data_source', 'cache')}）",
+        )
+
+    # ============================================================
+    # 第二层：实时爬虫
+    # ============================================================
+    logger.info(f"🔍 缓存未命中，触发爬虫: {brand} {model_name}")
+    crawl_result = None
+    try:
+        from app.services.crawler_service import get_crawler_manager
+        crawler = get_crawler_manager()
+        if crawler.is_any_configured:
+            crawl_result = await crawler.crawl_price(brand, model_name)
+    except Exception as e:
+        logger.warning(f"⚠️ 爬虫调用异常: {e}")
+
+    if crawl_result and crawl_result.get("success"):
+        # 爬取成功 → 落库
+        await crud.save_crawl_result(
+            brand=brand,
+            model=model_name,
+            avg_price=crawl_result["avg_price"],
+            low_price=crawl_result["low_price"],
+            high_price=crawl_result["high_price"],
+            data_source=crawl_result.get("source", "onebound"),
+        )
+        logger.info(
+            f"✅ 爬虫成功: {brand} {model_name} "
+            f"均价={crawl_result['avg_price']}, "
+            f"区间={crawl_result['low_price']}-{crawl_result['high_price']}"
+        )
+        return PriceResult(
+            brand=brand,
+            model=model_name,
+            avg_price=crawl_result["avg_price"],
+            low_price=crawl_result["low_price"],
+            high_price=crawl_result["high_price"],
+            matched=True,
+            note=f"实时抓取成功（来源: {crawl_result.get('source', 'onebound')}）",
+        )
+
+    # ============================================================
+    # 第三层：回退到原数据库（过期缓存或旧数据）
+    # ============================================================
+    logger.info(f"📦 爬虫未命中/未配置，回退到数据库: {brand} {model_name}")
     row = await crud.query_price(brand, model_name)
 
     if row:
         return PriceResult(
-            category=row.get("category", ""),
+            category=row["category"],
             brand=row["brand"],
             model=row["model"],
             avg_price=float(row["avg_price"]),
             low_price=float(row["low_price"]),
             high_price=float(row["high_price"]),
             matched=True,
-            note="数据库匹配成功",
+            note="数据库匹配成功（可能数据较旧，建议稍后刷新）",
         )
 
     return PriceResult(
@@ -39,251 +116,94 @@ async def query_price(brand: str, model_name: str) -> PriceResult:
     )
 
 
-async def query_price_detail(brand: str, model_name: str, category: str = "") -> PriceDetailResult:
-    """
-    查询价格详情（触发爬虫）
-    
-    流程：查缓存(TTL内) → 爬取实时数据 → 返回历史价格
-    
-    Args:
-        brand: 品牌
-        model_name: 型号
-        category: 品类
-        
-    Returns:
-        PriceDetailResult: 价格详情结果
-    """
-    logger.info(f"查询价格详情: {brand} {model_name}")
-    
-    result = PriceDetailResult(
-        brand=brand,
-        model=model_name,
-        category=category,
-        current_price={"avg": 0, "low": 0, "high": 0},
-        history_prices=[],
-        crawled_items=[],
-        note="",
-    )
-    
-    cache_row = await crud.query_price(brand, model_name)
-    
-    if cache_row:
-        crawled_at = cache_row.get("crawled_at")
-        if crawled_at and is_cache_valid(crawled_at, CACHE_TTL_HOURS):
-            logger.info("缓存命中，直接返回")
-            result.current_price = {
-                "avg": float(cache_row["avg_price"]),
-                "low": float(cache_row["low_price"]),
-                "high": float(cache_row["high_price"]),
-            }
-            result.category = cache_row.get("category", category)
-            result.note = "数据来自缓存（24小时内）"
-            
-            history = await get_history_prices(brand, model_name)
-            result.history_prices = history
-            
-            return result
-        else:
-            logger.info("缓存过期，触发爬取")
-            result.note = "缓存已过期，正在爬取实时数据..."
-    else:
-        logger.info("无缓存，触发爬取")
-        result.note = "无缓存数据，正在爬取实时数据..."
-    
-    crawl_result = await crawl_price(brand, model_name, category)
-    
-    if crawl_result.get("success"):
-        price_range = crawl_result.get("price_range", {})
-        result.current_price = {
-            "avg": price_range.get("avg", 0),
-            "low": price_range.get("low", 0),
-            "high": price_range.get("high", 0),
-        }
-        result.data_source = ", ".join(crawl_result.get("sources", []))
-        result.note = "实时数据爬取成功"
-        
-        crawled_items = crawl_result.get("items", [])
-        result.crawled_items = [
-            CrawledItem(
-                title=item.get("title", ""),
-                price=item.get("price", 0),
-                url=item.get("url", ""),
-                image=item.get("image", ""),
-            )
-            for item in crawled_items
-        ]
-        
-        await save_crawl_result(brand, model_name, category, price_range, crawl_result.get("sources", []))
-        
-        # 历史数据不足时，用 DeepSeek 推算过去价格走势
-        history = await get_history_prices(brand, model_name)
-        if len(history) < 3:
-            try:
-                from app.services.history_estimator import get_estimator
-                estimator = get_estimator()
-                await estimator.estimate(brand, model_name, category, price_range)
-                history = await get_history_prices(brand, model_name)
-            except Exception as e:
-                logger.warning(f"历史推算失败（不影响主流程）: {e}")
-        
-        result.history_prices = history
-        
-        return result
-    else:
-        logger.warning(f"爬取失败: {crawl_result.get('message')}")
-        
-        if cache_row:
-            result.current_price = {
-                "avg": float(cache_row["avg_price"]),
-                "low": float(cache_row["low_price"]),
-                "high": float(cache_row["high_price"]),
-            }
-            result.category = cache_row.get("category", category)
-            result.note = f"爬取失败，返回缓存数据。{crawl_result.get('message', '')}"
-            
-            history = await get_history_prices(brand, model_name)
-            result.history_prices = history
-            
-            return result
-        else:
-            result.note = f"爬取失败，且无缓存数据。{crawl_result.get('message', '')}"
-            return result
-
-
-def _sync_crawl_price(brand: str, model_name: str) -> Dict[str, Any]:
-    """
-    同步爬取价格数据（在线程池中运行）
-    
-    Args:
-        brand: 品牌
-        model_name: 型号
-        
-    Returns:
-        Dict: 爬取结果
-    """
-    try:
-        keyword = format_keyword(brand, model_name)
-        logger.info(f"开始爬取: {keyword}")
-        
-        manager = create_crawler_manager()
-        results = manager.crawl_all(keyword)
-        
-        if not results:
-            return {"success": False, "message": "无可用爬虫"}
-        
-        merged = manager.merge_results(results)
-        
-        if merged.get("success"):
-            logger.info(f"爬取成功: {merged.get('price_range')}")
-            return merged
-        else:
-            return {"success": False, "message": merged.get("message", "爬取失败")}
-            
-    except Exception as e:
-        logger.error(f"爬取异常: {e}")
-        return {"success": False, "message": str(e)}
-
-
-async def crawl_price(brand: str, model_name: str, category: str = "") -> Dict[str, Any]:
-    """
-    异步爬取价格数据（使用线程池避免阻塞事件循环）
-    
-    Args:
-        brand: 品牌
-        model_name: 型号
-        category: 品类
-        
-    Returns:
-        Dict: 爬取结果
-    """
-    loop = asyncio.get_event_loop()
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
-    
-    try:
-        result = await loop.run_in_executor(executor, _sync_crawl_price, brand, model_name)
-        return result
-    finally:
-        executor.shutdown(wait=False)
-
-
-async def save_crawl_result(
+async def get_enriched_price_history(
     brand: str,
-    model_name: str,
-    category: str,
-    price_range: Dict[str, float],
-    sources: List[str]
-):
+    model: str,
+    days: int = 180,
+    base_price: float = 0,
+) -> dict:
     """
-    保存爬取结果到数据库
-    
-    Args:
-        brand: 品牌
-        model_name: 型号
-        category: 品类
-        price_range: 价格区间
-        sources: 数据来源列表
-    """
-    try:
-        avg_price = price_range.get("avg", 0)
-        low_price = price_range.get("low", 0)
-        high_price = price_range.get("high", 0)
-        
-        if avg_price <= 0:
-            logger.warning("价格无效，跳过保存")
-            return
-        
-        data_source = ", ".join(sources) if sources else "crawler"
-        
-        await crud.upsert_price(
-            brand=brand,
-            model=model_name,
-            avg_price=avg_price,
-            low_price=low_price,
-            high_price=high_price,
-            category=category,
-            data_source=data_source,
-        )
-        
-        await crud.insert_price_history(
-            brand=brand,
-            model=model_name,
-            avg_price=avg_price,
-            low_price=low_price,
-            high_price=high_price,
-            source=data_source,
-        )
-        
-        logger.info(f"保存爬取结果成功: {brand} {model_name}")
-        
-    except Exception as e:
-        logger.error(f"保存爬取结果失败: {e}")
+    获取价格历史数据
 
+    流程:
+    1. 优先使用前端传入的 base_price（AI识别建议价）
+    2. 其次从 market_prices / published_items 获取参考价
+    3. 生成过去6个月的价格走势数据
 
-async def get_history_prices(brand: str, model_name: str) -> List[PriceHistoryItem]:
-    """
-    获取价格历史记录
-    
-    Args:
-        brand: 品牌
-        model_name: 型号
-        
     Returns:
-        List[PriceHistoryItem]: 历史记录列表
+        dict: {
+            "brand", "model", "avg_price", "min_price", "max_price",
+            "price_points": [...], "trend": str, "source": str,
+        }
     """
+    # Step 1: 确定基准价格
+    if base_price > 0:
+        # 优先使用前端传入的 AI 识别建议价
+        base_avg = base_price
+        base_low = round(base_avg * 0.85)
+        base_high = round(base_avg * 1.15)
+    else:
+        # 其次从数据库获取
+        current_price = await crud.get_market_price_for_estimate(brand, model)
+        if current_price:
+            base_avg = current_price["avg_price"]
+            base_low = current_price["low_price"]
+            base_high = current_price["high_price"]
+        else:
+            # 最后：从 published_items 取该品牌型号的均价
+            stats = await crud.get_price_stats(brand, model)
+            if stats and stats.get("avg", 0) > 0:
+                base_avg = stats["avg"]
+                base_low = stats["min"]
+                base_high = stats["max"]
+            else:
+                # 完全没有数据，无法估算
+                return {
+                    "brand": brand,
+                    "model": model,
+                    "avg_price": 0,
+                    "min_price": 0,
+                    "max_price": 0,
+                    "price_points": [],
+                    "trend": "",
+                    "source": "",
+                }
+
+    # Step 2: 生成价格走势
+    from app.services.history_estimator import get_history_estimator
+    estimator = get_history_estimator()
+    estimate_result = await estimator.estimate_history(
+        brand=brand,
+        model_name=model,
+        current_avg_price=base_avg,
+        current_low_price=base_low,
+        current_high_price=base_high,
+    )
+
+    price_points = estimate_result.get("price_points", [])
+
+    # Step 3: 落库保存
     try:
-        records = await crud.get_price_history(brand, model_name, limit=50)
-        
-        return [
-            PriceHistoryItem(
-                price=float(record.get("price", 0)),
-                low_price=float(record.get("low_price", 0)),
-                high_price=float(record.get("high_price", 0)),
-                recorded_at=str(record.get("recorded_at", "")),
-                source=record.get("source", ""),
+        await crud.delete_old_estimated_history(brand, model)
+        for point in price_points:
+            await crud.save_price_history_point(
+                brand=brand,
+                model=model,
+                price=point["price"],
+                price_type="avg",
+                source=estimate_result.get("source", "deepseek"),
+                recorded_at=point["date"],
             )
-            for record in records
-        ]
-        
     except Exception as e:
-        logger.error(f"获取历史价格失败: {e}")
-        return []
+        logger.warning(f"Failed to save history: {e}")
+
+    return {
+        "brand": brand,
+        "model": model,
+        "avg_price": estimate_result.get("avg_price", base_avg),
+        "min_price": estimate_result.get("min_price", base_low),
+        "max_price": estimate_result.get("max_price", base_high),
+        "price_points": price_points,
+        "trend": estimate_result.get("trend", ""),
+        "source": estimate_result.get("source", "deepseek"),
+    }

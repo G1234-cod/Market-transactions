@@ -6,8 +6,12 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import Request
 
-load_dotenv()
+# ✅ 修复：显式指定 .env 路径（避免 CWD 不同导致找不到）
+_env_path = Path(__file__).parent.parent / '.env'
+_env_loaded = load_dotenv(dotenv_path=_env_path)
 logger = logging.getLogger(__name__)
+if not _env_loaded:
+    logger.warning(f"⚠️ 未找到 .env 文件 ({_env_path})，使用默认配置（部分功能可能不可用）")
 
 
 class Settings:
@@ -38,7 +42,7 @@ class Settings:
     # ============================================================
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 默认 7 天
 
     # ============================================================
     # 图片上传
@@ -72,6 +76,19 @@ class Settings:
     # HuggingFace 格式 (ViT-B/32) 不兼容！
     CLIP_MODEL_NAME: str = os.getenv("CLIP_MODEL_NAME", "ViT-B-32")
     CLIP_PRETRAINED: str = os.getenv("CLIP_PRETRAINED", "laion2b_s34b_b79k")
+
+    # ============================================================
+    # OneBound 爬虫 API（淘宝/电商数据抓取）
+    # ============================================================
+    ONEBOUND_API_KEY: str = os.getenv("ONEBOUND_API_KEY", "")
+    ONEBOUND_API_SECRET: str = os.getenv("ONEBOUND_API_SECRET", "")
+    ONEBOUND_BASE_URL: str = os.getenv("ONEBOUND_BASE_URL", "https://api.onebound.cn/taobao")
+    # 爬虫缓存有效期（秒），默认 24 小时
+    CRAWL_CACHE_TTL: int = int(os.getenv("CRAWL_CACHE_TTL", "86400"))
+    # AI 历史数据估算最少记录数阈值
+    HISTORY_ESTIMATE_MIN_RECORDS: int = int(os.getenv("HISTORY_ESTIMATE_MIN_RECORDS", "3"))
+    # AI 估算历史月数
+    HISTORY_ESTIMATE_MONTHS: int = int(os.getenv("HISTORY_ESTIMATE_MONTHS", "6"))
 
     # ============================================================
     # 服务器配置
@@ -334,17 +351,17 @@ def validate_config() -> list:
 def check_config():
     """检查配置并打印结果"""
     errors = validate_config()
-    
+
     if errors:
-        print("=" * 70)
-        print("⚠️ 配置验证发现以下问题:")
-        print("=" * 70)
+        logger.warning("=" * 70)
+        logger.warning("⚠️ 配置验证发现以下问题:")
+        logger.warning("=" * 70)
         for err in errors:
-            print(f"  {err}")
-        print("=" * 70)
+            logger.warning(f"  {err}")
+        logger.warning("=" * 70)
         return False
     else:
-        print("✅ 配置验证通过")
+        logger.info("✅ 配置验证通过")
         return True
 
 
@@ -354,49 +371,53 @@ def check_config():
 
 def print_config():
     """打印当前配置（隐藏敏感信息）"""
-    print("=" * 70)
-    print("📋 项目配置信息")
-    print("=" * 70)
-    
-    print("\n🔧 运行环境:")
-    print(f"  ENV: {settings.ENV}")
-    print(f"  DEBUG: {settings.DEBUG}")
-    print(f"  LOG_LEVEL: {settings.LOG_LEVEL}")
-    
-    print("\n🌐 服务器:")
-    print(f"  BASE_URL: {settings.BASE_URL}")
-    print(f"  STATIC_PREFIX: {settings.STATIC_PREFIX}")
-    
-    print("\n💾 数据库:")
-    print(f"  DB_HOST: {settings.DB_HOST}:{settings.DB_PORT}")
-    print(f"  DB_NAME: {settings.DB_NAME}")
-    
-    print("\n📁 ML 模型:")
-    print(f"  MODELS_DIR: {settings.MODELS_DIR}")
-    print(f"  YOLO_MODEL_PATH: {settings.YOLO_MODEL_PATH}")
-    print(f"  DEFECT_MODEL_PATH: {settings.DEFECT_MODEL_PATH}")
-    
-    print("\n🔍 Qdrant:")
-    print(f"  QDRANT_HOST: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
-    print(f"  QDRANT_COLLECTION: {settings.QDRANT_COLLECTION}")
-    
-    print("\n🔐 JWT:")
-    print(f"  ALGORITHM: {settings.ALGORITHM}")
-    print(f"  ACCESS_TOKEN_EXPIRE_MINUTES: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}")
-    print(f"  SECRET_KEY: {'*' * 20}（已隐藏）")
-    
-    print("\n🌍 CORS:")
-    print(f"  ALLOWED_ORIGINS: {settings.ALLOWED_ORIGINS}")
-    
-    print("\n🧠 CLIP 模型:")
-    print(f"  CLIP_MODEL_NAME: {settings.CLIP_MODEL_NAME}")
-    print(f"  CLIP_PRETRAINED: {settings.CLIP_PRETRAINED}")
-    print(f"  → open_clip 兼容名称: {get_clip_model_name()}")
-    
-    print("=" * 70)
+    lines = [
+        "=" * 70,
+        "📋 项目配置信息",
+        "=" * 70,
+        "",
+        "🔧 运行环境:",
+        f"  ENV: {settings.ENV}",
+        f"  DEBUG: {settings.DEBUG}",
+        f"  LOG_LEVEL: {settings.LOG_LEVEL}",
+        "",
+        "🌐 服务器:",
+        f"  BASE_URL: {settings.BASE_URL}",
+        f"  STATIC_PREFIX: {settings.STATIC_PREFIX}",
+        "",
+        "💾 数据库:",
+        f"  DB_HOST: {settings.DB_HOST}:{settings.DB_PORT}",
+        f"  DB_NAME: {settings.DB_NAME}",
+        "",
+        "📁 ML 模型:",
+        f"  MODELS_DIR: {settings.MODELS_DIR}",
+        f"  YOLO_MODEL_PATH: {settings.YOLO_MODEL_PATH}",
+        f"  DEFECT_MODEL_PATH: {settings.DEFECT_MODEL_PATH}",
+        "",
+        "🔍 Qdrant:",
+        f"  QDRANT_HOST: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}",
+        f"  QDRANT_COLLECTION: {settings.QDRANT_COLLECTION}",
+        "",
+        "🔐 JWT:",
+        f"  ALGORITHM: {settings.ALGORITHM}",
+        f"  ACCESS_TOKEN_EXPIRE_MINUTES: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}",
+        f"  SECRET_KEY: {'*' * 20}（已隐藏）",
+        "",
+        "🌍 CORS:",
+        f"  ALLOWED_ORIGINS: {settings.ALLOWED_ORIGINS}",
+        "",
+        "🧠 CLIP 模型:",
+        f"  CLIP_MODEL_NAME: {settings.CLIP_MODEL_NAME}",
+        f"  CLIP_PRETRAINED: {settings.CLIP_PRETRAINED}",
+        f"  → open_clip 兼容名称: {get_clip_model_name()}",
+        "=" * 70,
+    ]
+    for line in lines:
+        logger.info(line)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     print_config()
     print("\n")
     check_config()

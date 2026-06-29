@@ -34,7 +34,7 @@
       </div>
 
       <div v-if="text" class="relative">
-        <div class="prose prose-sm max-w-none text-text-primary leading-relaxed whitespace-pre-wrap min-h-[120px] p-4 bg-surface-secondary rounded-xl"
+        <div ref="textContent" class="prose prose-sm max-w-none text-text-primary leading-relaxed whitespace-pre-wrap min-h-[120px] p-4 bg-surface-secondary rounded-xl"
           :class="{ 'cursor-blink': active }">
           {{ text }}
         </div>
@@ -80,13 +80,17 @@ defineProps({
 defineEmits(['save'])
 
 const copied = ref(false)
+// ✅ 修复：使用 template ref 替代 document.querySelector
+const textContent = ref(null)
 
 async function copyText() {
   try {
-    await navigator.clipboard.writeText(document.querySelector('.prose')?.innerText || '')
+    const content = textContent.value?.innerText || ''
+    await navigator.clipboard.writeText(content)
     copied.value = true
     setTimeout(() => (copied.value = false), 2000)
-  } catch {
+  } catch (err) {
+    console.warn('剪贴板复制失败:', err)
   }
 }
 </script>
