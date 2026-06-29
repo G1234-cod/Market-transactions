@@ -1,55 +1,33 @@
 <template>
-  <div class="space-y-10 relative">
-    <div class="hero-section relative py-12 sm:py-16 overflow-hidden">
-      <div class="orb orb-primary w-72 h-72 -top-5 -right-5 animate-float-slow"></div>
-      <div class="orb orb-accent w-56 h-56 bottom-0 -left-5 animate-float-medium"></div>
-      
-      <div class="relative z-10">
-        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div>
-            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium mb-4 animate-fade-in-up-1">
-              <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-              管理员权限
-            </div>
-            
-            <h1 class="text-4xl sm:text-5xl font-extrabold gradient-text animate-fade-in-up-2">管理员控制台</h1>
-            <p class="text-text-secondary text-base mt-3 max-w-lg animate-fade-in-up-3">管理平台数据、测试模型效果、审核商品</p>
-          </div>
-          
-          <div class="badge badge-warning px-4 py-2 text-sm animate-fade-in-up-4">管理员</div>
-        </div>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold gradient-text">管理员控制台</h1>
+        <p class="text-text-muted text-sm mt-1">管理平台数据、测试模型效果、审核商品</p>
+      </div>
+      <div class="badge badge-warning">管理员</div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'users'">
+        <div class="stat-value text-primary-600">{{ stats.overview?.users || 0 }}</div>
+        <div class="stat-label">👤 注册用户</div>
+      </div>
+      <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'review'">
+        <div class="stat-value text-accent-600">{{ stats.overview?.published_items || 0 }}</div>
+        <div class="stat-label">📦 已发布商品</div>
+      </div>
+      <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'cases'">
+        <div class="stat-value text-warning-600">{{ stats.model_performance?.hard_cases?.unfixed || 0 }}</div>
+        <div class="stat-label">🔧 待修复错误案例</div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 animate-fade-in-up-2">
-      <div class="stat-card cursor-pointer card-glow-hover hover:-translate-y-2 transition-all" @click="activeTab = 'users'">
-        <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-primary-500/20 to-primary-600/20 flex items-center justify-center">
-          <span class="text-primary-400 text-xl">👤</span>
-        </div>
-        <div class="stat-value text-primary-400 text-4xl">{{ stats.overview?.users || 0 }}</div>
-        <div class="stat-label text-sm">注册用户</div>
-      </div>
-      <div class="stat-card cursor-pointer card-glow-hover hover:-translate-y-2 transition-all" @click="activeTab = 'review'">
-        <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-accent-500/20 to-accent-600/20 flex items-center justify-center">
-          <span class="text-accent-400 text-xl">📦</span>
-        </div>
-        <div class="stat-value text-accent-400 text-4xl">{{ stats.overview?.published_items || 0 }}</div>
-        <div class="stat-label text-sm">已发布商品</div>
-      </div>
-      <div class="stat-card cursor-pointer card-glow-hover hover:-translate-y-2 transition-all" @click="activeTab = 'cases'">
-        <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/20 flex items-center justify-center">
-          <span class="text-amber-400 text-xl">🔧</span>
-        </div>
-        <div class="stat-value text-amber-400 text-4xl">{{ stats.model_performance?.hard_cases?.unfixed || 0 }}</div>
-        <div class="stat-label text-sm">待修复错误案例</div>
-      </div>
-    </div>
-
-    <div class="flex flex-wrap gap-3 mb-8 animate-fade-in-up-3">
+    <div class="flex flex-wrap gap-2 mb-6">
       <button
         v-for="tab in tabs"
         :key="tab.id"
-        class="pill-button px-5 py-2.5 text-sm ripple-container"
+        class="pill-button"
         :class="activeTab === tab.id ? 'pill-button-active' : 'pill-button-inactive'"
         @click="activeTab = tab.id"
       >
@@ -60,41 +38,41 @@
     <transition name="page" mode="out-in">
       <div :key="activeTab">
       <!-- ==================== 数据概览 ==================== -->
-      <div v-if="activeTab === 'stats'" class="space-y-8">
-        <div class="glass-card card-glow-hover">
-          <div class="bg-gradient-to-r from-primary-500/15 via-accent-500/10 to-primary-500/15 px-8 py-5 border-b border-border/50">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-bold text-text-primary">📊 系统数据概览</h2>
-            <button @click="doSyncQdrant" class="px-4 py-2 rounded-xl text-xs font-medium bg-accent-500/15 text-accent-400 border border-accent-500/30 hover:bg-accent-500/25 transition-all ripple-container">
-              🔄 同步向量库
-            </button>
+      <div v-if="activeTab === 'stats'" class="space-y-6">
+        <div class="glass-card">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
+            <div class="flex items-center justify-between">
+              <h2 class="font-semibold text-text-primary">📊 系统数据概览</h2>
+              <button @click="doSyncQdrant" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-100 text-accent-700 border border-accent-200 hover:bg-accent-200 transition-all">
+                🔄 同步向量库
+              </button>
+            </div>
           </div>
-        </div>
-          <div class="p-8">
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-5 mb-8">
-              <div class="bg-space-lighter/50 rounded-2xl p-5 card-glow-hover">
-                <div class="text-3xl font-bold text-text-primary">{{ stats.overview?.total_items || 0 }}</div>
-                <div class="text-sm text-text-muted mt-1">商品总数</div>
+          <div class="p-6">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.total_items || 0 }}</div>
+                <div class="text-xs text-text-muted">商品总数</div>
               </div>
-              <div class="bg-space-lighter/50 rounded-2xl p-5 card-glow-hover">
-                <div class="text-3xl font-bold text-accent-400">{{ stats.overview?.sold_items || 0 }}</div>
-                <div class="text-sm text-text-muted mt-1">已售出</div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-accent-600">{{ stats.overview?.sold_items || 0 }}</div>
+                <div class="text-xs text-text-muted">已售出</div>
               </div>
-              <div class="bg-space-lighter/50 rounded-2xl p-5 card-glow-hover">
-                <div class="text-3xl font-bold text-text-primary">{{ stats.overview?.categories || 0 }}</div>
-                <div class="text-sm text-text-muted mt-1">品类数</div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.categories || 0 }}</div>
+                <div class="text-xs text-text-muted">品类数</div>
               </div>
-              <div class="bg-space-lighter/50 rounded-2xl p-5 card-glow-hover">
-                <div class="text-3xl font-bold text-text-primary">{{ stats.overview?.brands || 0 }}</div>
-                <div class="text-sm text-text-muted mt-1">品牌数</div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.brands || 0 }}</div>
+                <div class="text-xs text-text-muted">品牌数</div>
               </div>
-              <div class="bg-space-lighter/50 rounded-2xl p-5 card-glow-hover">
-                <div class="text-3xl font-bold text-text-primary">{{ stats.overview?.audit_logs || 0 }}</div>
-                <div class="text-sm text-text-muted mt-1">审计日志</div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.audit_logs || 0 }}</div>
+                <div class="text-xs text-text-muted">审计日志</div>
               </div>
-              <div class="bg-space-lighter/50 rounded-2xl p-5 card-glow-hover">
-                <div class="text-3xl font-bold text-text-primary">{{ stats.overview?.notifications || 0 }}</div>
-                <div class="text-sm text-text-muted mt-1">通知数</div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.notifications || 0 }}</div>
+                <div class="text-xs text-text-muted">通知数</div>
               </div>
             </div>
 
@@ -108,11 +86,11 @@
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-sm text-text-muted">已修复</span>
-                    <span class="font-semibold text-accent-400">{{ stats.model_performance?.hard_cases?.fixed || 0 }}</span>
+                    <span class="font-semibold text-accent-600">{{ stats.model_performance?.hard_cases?.fixed || 0 }}</span>
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-sm text-text-muted">待修复</span>
-                    <span class="font-semibold text-amber-400">{{ stats.model_performance?.hard_cases?.unfixed || 0 }}</span>
+                    <span class="font-semibold text-warning-600">{{ stats.model_performance?.hard_cases?.unfixed || 0 }}</span>
                   </div>
                 </div>
               </div>
@@ -124,18 +102,18 @@
       <!-- ==================== 模型测试 ==================== -->
       <div v-else-if="activeTab === 'test'" key="test" class="space-y-6">
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50">
-          <h2 class="font-semibold text-text-primary">🧪 模型测试</h2>
-        </div>
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
+            <h2 class="font-semibold text-text-primary">🧪 模型测试</h2>
+          </div>
           <div class="p-6">
             <div
-              class="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary-500/50 transition-colors cursor-pointer"
+              class="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary-300 transition-colors cursor-pointer"
               @click="$refs.fileInput.click()" @dragover.prevent @drop.prevent="handleDrop"
             >
               <div v-if="!testImage" class="space-y-3">
                 <div class="text-4xl">📷</div>
                 <p class="text-text-muted">点击或拖拽上传图片进行模型测试</p>
-                <p class="text-xs text-text-muted">支持 JPG、PNG 格式 · 可连续上传测试多张</p>
+                <p class="text-xs text-text-light">支持 JPG、PNG 格式 · 可连续上传测试多张</p>
               </div>
               <div v-else class="flex flex-col items-center">
                 <img :src="testImage" class="max-h-48 rounded-lg object-contain" />
@@ -164,19 +142,19 @@
             </div>
 
             <!-- 批量测试结果统计 -->
-            <div v-if="batchResults.length > 0" class="mt-4 glass-card p-4 bg-accent-500/10">
-              <h3 class="text-sm font-semibold text-accent-400 mb-3">📊 批量测试结果</h3>
+            <div v-if="batchResults.length > 0" class="mt-4 glass-card p-4 bg-accent-50">
+              <h3 class="text-sm font-semibold text-accent-700 mb-3">📊 批量测试结果</h3>
               <div class="grid grid-cols-4 gap-3 text-center">
                 <div>
                   <div class="text-xl font-bold text-text-primary">{{ batchResults.length }}</div>
                   <div class="text-xs text-text-muted">总测试数</div>
                 </div>
                 <div>
-                  <div class="text-xl font-bold text-accent-400">{{ batchAgreeCount }}</div>
+                  <div class="text-xl font-bold text-accent-600">{{ batchAgreeCount }}</div>
                   <div class="text-xs text-text-muted">模型一致</div>
                 </div>
                 <div>
-                  <div class="text-xl font-bold text-amber-400">{{ batchDisagreeCount }}</div>
+                  <div class="text-xl font-bold text-warning-600">{{ batchDisagreeCount }}</div>
                   <div class="text-xs text-text-muted">模型不一致</div>
                 </div>
                 <div>
@@ -184,7 +162,7 @@
                   <div class="text-xs text-text-muted">一致率</div>
                 </div>
               </div>
-              <button class="btn-secondary-sm mt-3 ripple-container" @click="batchResults = []">清除结果</button>
+              <button class="btn-secondary-sm mt-3" @click="batchResults = []">清除结果</button>
             </div>
 
             <!-- 单张测试结果 -->
@@ -250,20 +228,20 @@
               </div>
 
               <!-- 模型不一致提示 -->
-              <div v-if="testResult.model_comparison?.has_disagreement" class="glass-card bg-amber-500/10">
-                <div class="px-4 py-3 border-b border-amber-500/30">
-                  <h3 class="font-semibold text-sm text-amber-400">⚠️ 模型结果不一致</h3>
+              <div v-if="testResult.model_comparison?.has_disagreement" class="glass-card bg-warning-50">
+                <div class="px-4 py-3 border-b border-warning-200">
+                  <h3 class="font-semibold text-sm text-warning-700">⚠️ 模型结果不一致</h3>
                 </div>
                 <div class="p-4">
                   <div class="grid grid-cols-2 gap-4">
-                    <div class="bg-space-lighter/50 rounded-lg p-3">
+                    <div class="bg-white rounded-lg p-3">
                       <div class="text-xs text-text-muted mb-1">自研YOLO模型</div>
-                      <div class="font-semibold text-text-primary">{{ testResult.model_comparison?.yolo?.category || '-' }}</div>
+                      <div class="font-semibold">{{ testResult.model_comparison?.yolo?.category || '-' }}</div>
                       <div class="text-xs text-text-muted">置信度: {{ (testResult.model_comparison?.yolo?.confidence * 100)?.toFixed(1) || 0 }}%</div>
                     </div>
-                    <div class="bg-space-lighter/50 rounded-lg p-3">
+                    <div class="bg-white rounded-lg p-3">
                       <div class="text-xs text-text-muted mb-1">阿里云Qwen模型</div>
-                      <div class="font-semibold text-text-primary">{{ testResult.model_comparison?.qwen?.category || '-' }}</div>
+                      <div class="font-semibold">{{ testResult.model_comparison?.qwen?.category || '-' }}</div>
                       <div class="text-xs text-text-muted">品牌: {{ testResult.model_comparison?.qwen?.brand || '-' }}</div>
                     </div>
                   </div>
@@ -272,8 +250,8 @@
 
               <!-- 瑕疵检测结果（含标注图） -->
               <div v-if="testResult.defect_result?.defect_count > 0" class="glass-card">
-                <div class="px-4 py-3 border-b border-border/50 bg-gradient-to-r from-danger-500/10 to-amber-500/10">
-                  <h3 class="font-semibold text-sm text-danger-400">🔍 瑕疵检测结果</h3>
+                <div class="px-4 py-3 border-b border-border bg-gradient-to-r from-danger-50 to-warning-50">
+                  <h3 class="font-semibold text-sm text-danger-700">🔍 瑕疵检测结果</h3>
                 </div>
                 <div class="p-4">
                   <div class="flex flex-col md:flex-row gap-4">
@@ -288,10 +266,10 @@
                     </div>
                     <div class="flex-1">
                       <div class="flex items-center gap-3 mb-3">
-                        <div class="text-3xl font-bold text-danger-400">{{ testResult.defect_result.defect_count }}</div>
+                        <div class="text-3xl font-bold text-danger-600">{{ testResult.defect_result.defect_count }}</div>
                         <div>
                           <div class="text-sm text-text-muted">处瑕疵</div>
-                          <div class="text-xs text-text-muted">详见下方标签</div>
+                          <div class="text-xs text-text-light">详见下方标签</div>
                         </div>
                       </div>
                       <div class="flex flex-wrap gap-2">
@@ -330,7 +308,7 @@
       <!-- ==================== 商品审核 ==================== -->
       <div v-else-if="activeTab === 'review'" key="review" class="space-y-6">
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50 flex items-center justify-between flex-wrap gap-3">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between flex-wrap gap-3">
             <h2 class="font-semibold text-text-primary">🔍 商品审核</h2>
             <div class="flex items-center gap-2">
               <input
@@ -391,17 +369,17 @@
       <!-- ==================== 训练指标 ==================== -->
       <div v-else-if="activeTab === 'metrics'" key="metrics" class="space-y-6">
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
             <h2 class="font-semibold text-text-primary">📈 模型训练指标</h2>
           </div>
           <div class="p-6">
             <div class="flex items-center justify-between mb-4">
               <div>
-                <div class="text-3xl font-bold text-primary-400">{{ (modelMetricsStats.avg_accuracy * 100)?.toFixed(2) || '0.00' }}%</div>
+                <div class="text-3xl font-bold text-primary-600">{{ (modelMetricsStats.avg_accuracy * 100)?.toFixed(2) || '0.00' }}%</div>
                 <div class="text-xs text-text-muted">平均准确率</div>
               </div>
               <div>
-                <div class="text-3xl font-bold text-accent-400">{{ (modelMetricsStats.avg_f1 * 100)?.toFixed(2) || '0.00' }}%</div>
+                <div class="text-3xl font-bold text-accent-600">{{ (modelMetricsStats.avg_f1 * 100)?.toFixed(2) || '0.00' }}%</div>
                 <div class="text-xs text-text-muted">平均F1分数</div>
               </div>
               <div>
@@ -411,7 +389,7 @@
             </div>
 
             <div v-if="modelMetrics.length > 0" class="space-y-3 max-h-96 overflow-y-auto">
-              <div v-for="metric in modelMetrics" :key="metric.id" class="bg-space-lighter/50 rounded-xl p-4">
+              <div v-for="metric in modelMetrics" :key="metric.id" class="bg-surface-secondary rounded-xl p-4">
                 <div class="flex items-center justify-between mb-2">
                   <span class="font-medium text-sm">{{ metric.model_name === 'yolo' ? '分类模型 (YOLO)' : '瑕疵检测模型' }}</span>
                   <span class="text-xs text-text-muted">{{ formatDate(metric.training_date) }}</span>
@@ -445,7 +423,7 @@
 
         <!-- 触发模型训练 -->
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50 flex items-center justify-between">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
             <h2 class="font-semibold text-text-primary">⚙️ 模型训练</h2>
             <div class="flex items-center gap-2">
               <span v-if="weeklySchedulerRunning" class="text-xs text-accent-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent-500 animate-pulse"></span> 每周自动训练运行中</span>
@@ -478,10 +456,10 @@
 
               <!-- ✅ 训练进度条 -->
               <div v-if="activeJobs.length" class="space-y-3">
-                <div v-for="job in activeJobs" :key="job.job_id" class="rounded-xl border border-primary-500/30 bg-primary-500/10 p-4">
+                <div v-for="job in activeJobs" :key="job.job_id" class="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
                   <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-semibold text-primary-400">{{ job.model_name === 'yolo' ? '分类模型' : '瑕疵模型' }} 训练中</span>
-                    <span class="text-xs text-primary-400">{{ job.progress }}%</span>
+                    <span class="text-sm font-semibold text-primary-700">{{ job.model_name === 'yolo' ? '分类模型' : '瑕疵模型' }} 训练中</span>
+                    <span class="text-xs text-primary-500">{{ job.progress }}%</span>
                   </div>
                   <div class="w-full h-3 bg-primary-200 rounded-full overflow-hidden">
                     <div class="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-1000"
@@ -492,8 +470,8 @@
               </div>
 
               <div v-if="trainingResult" class="rounded-xl p-4"
-                :class="trainingResult.success ? 'bg-accent-500/10' : 'bg-danger-500/10'">
-                <p class="text-sm" :class="trainingResult.success ? 'text-accent-400' : 'text-danger-400'">
+                :class="trainingResult.success ? 'bg-accent-50' : 'bg-danger-50'">
+                <p class="text-sm" :class="trainingResult.success ? 'text-accent-700' : 'text-danger-700'">
                   {{ trainingResult.message || (trainingResult.success ? '训练已启动' : '训练失败') }}
                 </p>
               </div>
@@ -511,9 +489,9 @@
               </div>
 
               <!-- 训练计划提示 -->
-              <div class="bg-space-lighter/50 rounded-xl p-4 text-xs text-text-muted">
-                <p class="font-medium mb-2">📅 训练计划：</p>
-                <ul class="list-disc list-inside space-y-1">
+              <div class="bg-surface-secondary rounded-xl p-3 text-xs text-text-muted">
+                <p class="font-medium mb-1">📅 训练计划：</p>
+                <ul class="list-disc list-inside space-y-0.5">
                   <li>✅ 每周一凌晨2点自动训练（已启用）</li>
                   <li>手动训练：积累错误案例后随时触发</li>
                   <li>差异数据积累到 50+ 条后建议重新训练</li>
@@ -527,7 +505,7 @@
       <!-- ==================== 错误案例 ==================== -->
       <div v-else-if="activeTab === 'cases'" key="cases" class="space-y-6">
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50 flex items-center justify-between">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
             <h2 class="font-semibold text-text-primary">📝 错误案例管理</h2>
             <select v-model="casesFilter" class="input-field-sm w-32" @change="loadHardCases">
               <option :value="false">待修复</option>
@@ -573,7 +551,7 @@
       <!-- ==================== 用户管理 ==================== -->
       <div v-if="activeTab === 'users'" key="users" class="space-y-6">
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50 flex items-center justify-between">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
             <h2 class="font-semibold text-text-primary">👤 用户管理</h2>
             <span class="text-xs text-text-muted">{{ adminUsers.length }} 个用户</span>
           </div>
@@ -590,19 +568,19 @@
             </div>
             <!-- 用户列表 -->
             <div class="space-y-2">
-              <div v-for="u in adminUsers" :key="u.id" class="flex items-center justify-between px-4 py-3 border border-border/50 rounded-xl hover:bg-space-lighter/50 transition-colors">
+              <div v-for="u in adminUsers" :key="u.id" class="flex items-center justify-between px-4 py-3 border border-border rounded-xl hover:bg-surface-secondary transition-colors">
                 <div class="flex items-center gap-4">
                   <span class="font-medium text-text-primary">{{ u.username }}</span>
-                  <span class="text-xs px-2 py-0.5 rounded-full" :class="u.role === 'admin' ? 'bg-amber-500/20 text-amber-400' : 'bg-primary-500/20 text-primary-400'">{{ u.role }}</span>
-                  <span class="text-xs px-2 py-0.5 rounded-full" :class="u.status === 'active' ? 'bg-success-500/20 text-success-400' : 'bg-danger-500/20 text-danger-400'">{{ u.status === 'active' ? '正常' : '已禁用' }}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full" :class="u.role === 'admin' ? 'bg-warning-100 text-warning-700' : 'bg-primary-100 text-primary-700'">{{ u.role }}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full" :class="u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">{{ u.status === 'active' ? '正常' : '已禁用' }}</span>
                   <span class="text-xs text-text-muted">{{ u.created_at?.slice(0,10) }}</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <button @click="toggleUser(u)" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ripple-container"
-                    :class="u.status === 'active' ? 'bg-danger-500/10 text-danger-400 border border-danger-500/30 hover:bg-danger-500/20' : 'bg-success-500/10 text-success-400 border border-success-500/30 hover:bg-success-500/20'">
+                  <button @click="toggleUser(u)" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    :class="u.status === 'active' ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-100'">
                     {{ u.status === 'active' ? '🔒 禁用' : '🔓 启用' }}
                   </button>
-                  <button @click="deleteUser(u)" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-danger-500/10 text-danger-400 border border-danger-500/30 hover:bg-danger-500/20 ripple-container">🗑 删除</button>
+                  <button @click="deleteUser(u)" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">🗑 删除</button>
                 </div>
               </div>
               <div v-if="!adminUsers.length" class="text-center py-8 text-text-muted">暂无用户</div>
@@ -614,7 +592,7 @@
       <!-- ==================== 品类管理 ==================== -->
       <div v-if="activeTab === 'categories'" key="categories" class="space-y-6">
         <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50 flex items-center justify-between">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
             <h2 class="font-semibold text-text-primary">🏷️ 品类品牌管理</h2>
             <span class="text-xs text-text-muted">{{ categoryBrandList.length }} 个品牌 · {{ Object.keys(groupedCategories).length }} 大类</span>
           </div>
@@ -630,12 +608,12 @@
             <!-- 列表 -->
             <div v-if="Object.keys(groupedCategories).length" class="space-y-4">
               <div v-for="(brands, cat) in groupedCategories" :key="cat" class="border border-border rounded-xl overflow-hidden">
-                <div class="bg-space-lighter/50 px-4 py-2.5 flex items-center justify-between">
+                <div class="bg-surface-secondary px-4 py-2.5 flex items-center justify-between">
                   <span class="font-semibold text-text-primary text-sm">{{ cat }}</span>
                   <span class="text-xs text-text-muted">{{ brands.length }} 个品牌</span>
                 </div>
                 <div class="p-3 flex flex-wrap gap-2">
-                  <span v-for="b in brands" :key="b" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-space-card border border-border text-text-secondary">
+                  <span v-for="b in brands" :key="b" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-border text-text-secondary">
                     {{ b }}
                   </span>
                 </div>
@@ -645,7 +623,7 @@
           </div>
         </div>
       </div>
-      </div>
+      </div> <!-- end :key wrapper -->
     </transition>
   </div>
 </template>
@@ -1083,4 +1061,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.input-field-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: white;
+  outline: none;
+}
+.input-field-sm:focus {
+  border-color: var(--color-primary-400);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
 </style>

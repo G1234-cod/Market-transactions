@@ -1,81 +1,65 @@
 <template>
-  <div class="space-y-12 relative">
-    <div class="hero-section text-center py-16 sm:py-24 relative">
-      <div class="orb orb-primary w-96 h-96 -top-20 -left-20 animate-float-slow"></div>
-      <div class="orb orb-accent w-80 h-80 -bottom-10 -right-10 animate-float-medium"></div>
-      <div class="orb orb-amber w-64 h-64 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-float-fast opacity-20"></div>
-      
-      <div class="relative z-10 space-y-6">
-        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-400 text-xs font-medium animate-fade-in-up-1">
-          <span class="w-2 h-2 rounded-full bg-primary-400 animate-pulse"></span>
-          AI 智能识别技术支持
-        </div>
-        
-        <h1 class="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight animate-fade-in-up-2">
-          <span class="gradient-text">发布二手商品</span>
-        </h1>
-        
-        <p class="text-text-secondary text-base sm:text-lg max-w-xl mx-auto leading-relaxed animate-fade-in-up-3">
-          上传物品照片，AI 自动识别商品信息并生成专业带货文案
-        </p>
+  <div class="space-y-8">
+    <div class="text-center space-y-4">
+      <div class="relative inline-block">
+        <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-xl -z-10"></div>
+        <h1 class="text-3xl sm:text-4xl font-bold gradient-text">发布二手商品</h1>
       </div>
+      <p class="text-text-muted text-sm sm:text-base max-w-md mx-auto">上传物品照片，AI 自动识别商品信息并生成专业带货文案</p>
     </div>
 
-    <div class="flex flex-wrap justify-center items-center gap-2 sm:gap-4 animate-fade-in-up-4">
+    <div class="flex flex-wrap justify-center items-center gap-2">
       <template v-for="(s, i) in steps" :key="s.label">
-        <div class="flex flex-col items-center gap-3 cursor-pointer group" @click="step >= i && (step = i)">
+        <div class="flex flex-col items-center gap-2 cursor-pointer group" @click="step >= i && (step = i)">
           <div class="relative">
-            <div class="step-indicator w-14 h-14 text-base"
+            <div class="step-indicator"
               :class="step >= i ? 'step-indicator-active' : 'step-indicator-pending'">
               <span v-if="step > i">✓</span><span v-else>{{ i + 1 }}</span>
             </div>
-            <div v-if="step >= i" class="absolute -inset-2 bg-gradient-to-r from-primary-500/40 to-accent-500/40 rounded-full blur-xl opacity-60 -z-10 animate-pulse-slow"></div>
+            <div v-if="step >= i" class="absolute -inset-1 bg-gradient-to-r from-primary-400/50 to-accent-400/50 rounded-full blur-lg opacity-50 -z-10 animate-pulse-slow"></div>
           </div>
-          <span class="text-sm font-medium transition-all" :class="step >= i ? 'text-primary-400' : 'text-text-muted group-hover:text-primary-400'">{{ s.label }}</span>
+          <span class="text-xs font-medium transition-colors" :class="step >= i ? 'text-primary-600' : 'text-text-muted group-hover:text-primary-500'">{{ s.label }}</span>
         </div>
-        <div v-if="i < steps.length - 1" class="w-12 sm:w-24 h-1.5 mx-2 rounded-full transition-all duration-500 relative overflow-hidden hidden sm:block"
-          :class="step > i ? 'bg-primary-500/30' : 'bg-border/50'">
+        <div v-if="i < steps.length - 1" class="w-10 sm:w-20 h-1 mx-1 rounded-full transition-all duration-500 relative overflow-hidden"
+          :class="step > i ? 'bg-primary-200' : 'bg-border-light'">
           <div v-if="step > i" class="absolute inset-y-0 left-0 gradient-primary rounded-full transition-all duration-500" style="width: 100%"></div>
         </div>
       </template>
     </div>
 
-    <div class="glass-card overflow-hidden animate-fade-in-up-5 card-glow-hover">
-      <div class="bg-gradient-to-r from-primary-500/15 via-accent-500/10 to-primary-500/15 px-8 py-5 border-b border-border/50">
-        <div class="flex items-center gap-4">
-          <span class="text-2xl">{{ stepIcons[step] }}</span>
-          <div>
-            <h2 class="text-lg font-bold text-text-primary">{{ stepTitles[step] }}</h2>
-            <p class="text-xs text-text-muted">第 {{ step + 1 }} / {{ steps.length }} 步</p>
-          </div>
+    <div class="glass-card overflow-hidden">
+      <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">{{ stepIcons[step] }}</span>
+          <h2 class="font-semibold text-text-primary">{{ stepTitles[step] }}</h2>
         </div>
       </div>
       
-      <div class="p-8">
+      <div class="p-6">
         <transition name="step" mode="out-in">
-          <div v-if="step === 0" key="upload" class="space-y-6">
+          <div v-if="step === 0" key="upload" class="space-y-5">
             <ImageUploader v-model="imageFile" />
             <button 
-              class="btn-primary w-full ripple-container text-lg py-4"
+              class="btn-primary w-full"
               :disabled="!imageFile || extracting" 
               @click="doExtract"
             >
-              <span v-if="extracting" class="loading-spinner mr-3" />
+              <span v-if="extracting" class="loading-spinner mr-2" />
               <span>{{ extracting ? 'AI 视觉识别中…' : '🚀 开始识别' }}</span>
             </button>
           </div>
 
-          <div v-else-if="step === 1" key="confirm" class="space-y-6">
+          <div v-else-if="step === 1" key="confirm" class="space-y-4">
             <ConfirmCard :extractResult="extractResult" :priceInfo="priceInfo" :loading="queryingPrice"
               @confirm="doGenerate" @saveDraft="doSaveDraft" />
-            <button class="btn-outline w-full flex items-center justify-center gap-2 ripple-container py-3" @click="step = 0">
+            <button class="btn-outline w-full flex items-center justify-center gap-2" @click="step = 0">
               <span>←</span> 返回重新上传
             </button>
           </div>
 
-          <div v-else-if="step === 2" key="generate" class="space-y-6">
+          <div v-else-if="step === 2" key="generate" class="space-y-4">
             <TypewriterText :text="generatedText" :active="generating" :done="generateDone" @save="doSave" />
-            <button class="btn-outline w-full flex items-center justify-center gap-2 ripple-container py-3" @click="resetAll">
+            <button class="btn-outline w-full flex items-center justify-center gap-2" @click="resetAll">
               发布另一件商品 <span>→</span>
             </button>
           </div>
@@ -215,6 +199,7 @@ async function doSaveDraft(form) {
 }
 
 async function doGenerate(form) {
+  // ✅ 修复：清理旧的 timeout 防止竞态
   if (_sseTimeout) { clearTimeout(_sseTimeout); _sseTimeout = null }
   if (_streamControl) {
     _streamControl.abort()
@@ -337,6 +322,7 @@ async function doGenerate(form) {
 async function doSave() {
   const lines = generatedText.value.split('\n')
   let title = lines[0] || 'AI 生成商品'
+  // ✅ 商城展示用户手动输入的价格，不使用 AI 定价
   let price = _savedForm.value?.user_price || _savedForm.value?.suggested_price || 0
   try {
     await saveHistory({

@@ -1,10 +1,10 @@
 <template>
   <div class="glass-card overflow-hidden">
-  <div class="bg-gradient-to-r from-primary-500/10 to-accent-500/10 px-6 py-4 border-b border-border/50">
+    <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
       <div class="flex items-center gap-3">
         <div class="relative">
-          <div class="w-10 h-10 rounded-xl gradient-amber flex items-center justify-center text-space text-sm font-bold shadow-lg shadow-amber-500/30">✎</div>
-          <div class="absolute -inset-1 bg-gradient-to-br from-amber-500/40 to-orange-500/40 rounded-xl blur-lg opacity-40 -z-10"></div>
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-amber-500/30">✎</div>
+          <div class="absolute -inset-1 bg-gradient-to-br from-amber-400/40 to-orange-400/40 rounded-xl blur-lg opacity-40 -z-10"></div>
         </div>
         <div>
           <h3 class="font-semibold text-text-primary">确认商品信息</h3>
@@ -75,33 +75,33 @@
       </div>
 
       <!-- ✅ AI 定价（独立区块，系统自动生成，仅供展示） -->
-      <div class="rounded-xl overflow-hidden border-2 border-dashed border-primary-500/30 bg-gradient-to-br from-primary-500/10 to-accent-500/10">
+      <div class="rounded-xl overflow-hidden border-2 border-dashed border-primary-300 bg-gradient-to-br from-primary-50/50 to-blue-50/50">
         <div class="px-5 py-4">
           <div class="flex items-center justify-between mb-3">
-            <span class="text-xs text-primary-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <span class="text-xs text-primary-600 font-bold uppercase tracking-wider flex items-center gap-1.5">
               <span>🤖</span> AI 智能定价
             </span>
-            <span class="text-[10px] text-primary-400 bg-primary-500/20 px-2 py-0.5 rounded-full">系统自动生成</span>
+            <span class="text-[10px] text-primary-400 bg-primary-100 px-2 py-0.5 rounded-full">系统自动生成</span>
           </div>
           <div class="flex items-baseline gap-2">
-            <span class="text-3xl font-extrabold text-amber-400">¥{{ (extractResult.suggested_price || 0).toLocaleString() }}</span>
+            <span class="text-3xl font-extrabold text-primary-700">¥{{ (extractResult.suggested_price || 0).toLocaleString() }}</span>
             <span class="text-xs text-primary-400">/ 建议售价</span>
           </div>
-          <p v-if="extractResult.price_reasoning" class="text-xs text-primary-400 mt-2 italic">"{{ extractResult.price_reasoning }}"</p>
+          <p v-if="extractResult.price_reasoning" class="text-xs text-primary-500 mt-2 italic">"{{ extractResult.price_reasoning }}"</p>
         </div>
       </div>
 
       <!-- ✅ 用户手动定价（完全独立的区块） -->
-      <div class="rounded-xl border border-border/50 bg-space-lighter/30 p-5 space-y-3">
+      <div class="rounded-xl border border-border bg-white p-5 space-y-3">
         <div class="flex items-center justify-between">
           <span class="text-xs text-text-primary font-bold uppercase tracking-wider flex items-center gap-1.5">
             <span>✏️</span> 你的售价
           </span>
-          <span class="text-[10px] text-text-muted bg-space-card px-2 py-0.5 rounded-full">手动输入</span>
+          <span class="text-[10px] text-text-muted bg-surface-secondary px-2 py-0.5 rounded-full">手动输入</span>
         </div>
         <div class="flex items-center gap-3">
           <div class="relative flex-1">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted font-semibold text-lg">¥</span>
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-lg">¥</span>
             <input
               id="user-price"
               v-model.number="local.user_price"
@@ -110,7 +110,7 @@
               max="9999999"
               step="1"
               placeholder="输入你的卖价"
-              class="w-full pl-9 pr-4 py-3 bg-space-card border border-border rounded-xl text-lg font-bold text-text-primary placeholder:text-text-muted focus:bg-space-card focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/10 focus:outline-none transition-all"
+              class="w-full pl-9 pr-4 py-3 bg-surface-secondary border border-border rounded-xl text-lg font-bold text-text-primary placeholder:text-text-muted focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:outline-none transition-all"
               autocomplete="off"
             />
           </div>
@@ -118,7 +118,7 @@
           <button
             v-if="local.brand && local.model"
             @click="goToPriceHistory"
-            class="flex-shrink-0 px-4 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-accent-500 to-success-500 text-white shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 hover:from-accent-600 hover:to-success-600 transition-all flex items-center gap-1.5 ripple-container"
+            class="flex-shrink-0 px-4 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-accent-500 to-green-500 text-white shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 hover:from-accent-600 hover:to-green-600 transition-all flex items-center gap-1.5"
             title="查看该商品历史价格走势"
           >
             <span>📊</span> 历史价格
@@ -127,14 +127,14 @@
         <p class="text-[11px] text-text-muted">此价格将展示在商城中，AI 价格仅供你参考</p>
       </div>
 
-      <div v-if="extractResult.annotated_url" class="rounded-xl overflow-hidden border border-border/50">
-        <div class="bg-gradient-to-r from-danger-500/10 to-amber-500/10 px-4 py-3 border-b border-border/50">
+      <div v-if="extractResult.annotated_url" class="rounded-xl overflow-hidden border border-border">
+        <div class="bg-gradient-to-r from-danger-50 to-warning-50/50 px-4 py-3 border-b border-border">
           <div class="flex items-center justify-between">
-            <span class="text-xs text-danger-400 font-medium flex items-center gap-1.5">
-            <span>🔍</span> 瑕疵检测结果
-          </span>
+            <span class="text-xs text-danger-700 font-medium flex items-center gap-1.5">
+              <span>🔍</span> 瑕疵检测结果
+            </span>
             <div class="flex items-center gap-3">
-              <span v-if="extractResult.defect_count" class="text-xs text-danger-400">
+              <span v-if="extractResult.defect_count" class="text-xs text-danger-600">
                 发现 {{ extractResult.defect_count }} 处瑕疵
               </span>
               <!-- ✅ R4: 成色分级标签 -->
@@ -145,9 +145,9 @@
             </div>
           </div>
         </div>
-        <div class="p-4 flex justify-center bg-space-lighter/30">
-                  <img :src="extractResult.annotated_url" alt="瑕疵标注图" class="max-h-64 rounded-lg object-contain" />
-                </div>
+        <div class="p-4 flex justify-center bg-gray-50">
+          <img :src="extractResult.annotated_url" alt="瑕疵标注图" class="max-h-64 rounded-lg object-contain shadow-sm" />
+        </div>
         <!-- ✅ 5级成色程度 —— 瑕疵底部独立一行 -->
         <div v-if="extractResult.condition_grade" class="px-4 py-3 border-t border-border flex items-center justify-between"
           :class="conditionGradeBgClass">
@@ -160,25 +160,25 @@
 
       <!-- ✅ R5: 市场行情参考 -->
       <div v-if="priceInfo && priceInfo.matched" class="rounded-xl overflow-hidden">
-        <div class="bg-gradient-to-r from-accent-500/10 via-accent-500/10 to-primary-500/10 border border-accent-500/20 px-4 py-4">
+        <div class="bg-gradient-to-r from-accent-50 via-accent-50/50 to-accent-100/50 border border-accent-200 px-4 py-4">
           <div class="flex items-center justify-between mb-3">
-            <span class="text-xs text-accent-400 font-medium flex items-center gap-1.5">
+            <span class="text-xs text-accent-700 font-medium flex items-center gap-1.5">
               <span>📊</span> 市场行情参考
             </span>
-            <span class="text-xs text-accent-400">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
+            <span class="text-xs text-accent-600">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
           </div>
           <div class="flex items-end gap-6">
             <div>
-              <p class="text-xs text-accent-400">均价</p>
-              <p class="text-2xl font-bold text-amber-400">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
+              <p class="text-xs text-accent-600">均价</p>
+              <p class="text-2xl font-bold text-accent-700">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
             </div>
             <div class="flex-1 pb-1.5">
-              <div class="flex justify-between text-[10px] text-text-muted mb-0.5">
+              <div class="flex justify-between text-[10px] text-accent-500/70 mb-0.5">
                 <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
                 <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
               </div>
-              <div class="relative h-2.5 bg-accent-500/20 rounded-full overflow-hidden">
-                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-primary-400 rounded-full transition-all duration-700"
+              <div class="relative h-2.5 bg-accent-200/50 rounded-full overflow-hidden">
+                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-accent-300 rounded-full transition-all duration-700"
                   :style="{ left: lowPct + '%', width: rangePct + '%' }" />
               </div>
             </div>
@@ -187,25 +187,25 @@
       </div>
 
       <div v-if="priceInfo && priceInfo.matched && !local.suggested_price" class="rounded-xl overflow-hidden">
-        <div class="bg-gradient-to-r from-accent-500/10 via-accent-500/10 to-primary-500/10 border border-accent-500/20 px-4 py-4">
+        <div class="bg-gradient-to-r from-accent-50 via-accent-50/50 to-accent-100/50 border border-accent-200 px-4 py-4">
           <div class="flex items-center justify-between mb-3">
-            <span class="text-xs text-accent-400 font-medium flex items-center gap-1.5">
+            <span class="text-xs text-accent-700 font-medium flex items-center gap-1.5">
               <span>📊</span> 市场行情参考
             </span>
-            <span class="text-xs text-accent-400">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
+            <span class="text-xs text-accent-600">{{ priceInfo.brand }} {{ priceInfo.model }}</span>
           </div>
           <div class="flex items-end gap-6">
             <div>
-              <p class="text-xs text-accent-400">均价</p>
-              <p class="text-2xl font-bold text-amber-400">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
+              <p class="text-xs text-accent-600">均价</p>
+              <p class="text-2xl font-bold text-accent-700">¥{{ priceInfo.avg_price.toLocaleString() }}</p>
             </div>
             <div class="flex-1 pb-1.5">
-              <div class="flex justify-between text-[10px] text-text-muted mb-0.5">
+              <div class="flex justify-between text-[10px] text-accent-500/70 mb-0.5">
                 <span>¥{{ priceInfo.low_price.toLocaleString() }}</span>
                 <span>¥{{ priceInfo.high_price.toLocaleString() }}</span>
               </div>
-              <div class="relative h-2.5 bg-accent-500/20 rounded-full overflow-hidden">
-                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-primary-400 rounded-full transition-all duration-700"
+              <div class="relative h-2.5 bg-accent-200/50 rounded-full overflow-hidden">
+                <div class="absolute top-0 bottom-0 bg-gradient-to-r from-accent-500 via-accent-400 to-accent-300 rounded-full transition-all duration-700"
                   :style="{ left: lowPct + '%', width: rangePct + '%' }" />
               </div>
             </div>
@@ -213,19 +213,19 @@
         </div>
       </div>
       <div v-else-if="priceInfo && !priceInfo.matched"
-        class="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm text-amber-400 flex items-start gap-2">
+        class="rounded-xl bg-warning-50 border border-warning-200 px-4 py-3 text-sm text-warning-700 flex items-start gap-2">
         <span class="text-lg">💡</span>
         <span>暂无该型号的市场行情，AI 将根据经验生成建议价</span>
       </div>
 
-      <div v-if="warnings.length" class="rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-xs space-y-1">
-        <p class="text-amber-400 font-medium flex items-center gap-1.5"><span>⚠️</span> 温馨提示：</p>
-        <ul class="list-disc list-inside space-y-0.5 text-amber-400">
+      <div v-if="warnings.length" class="rounded-xl bg-warning-50 border border-warning-200 px-4 py-3 text-xs space-y-1">
+        <p class="text-warning-700 font-medium flex items-center gap-1.5"><span>⚠️</span> 温馨提示：</p>
+        <ul class="list-disc list-inside space-y-0.5 text-warning-600">
           <li v-for="m in warnings" :key="m">{{ m }}</li>
         </ul>
       </div>
 
-      <div v-if="errors.length" class="rounded-xl bg-danger-500/10 border border-danger-500/30 px-4 py-3 text-xs text-danger-400 space-y-1" role="alert" aria-live="polite">
+      <div v-if="errors.length" class="rounded-xl bg-danger-50 border border-danger-200 px-4 py-3 text-xs text-danger-600 space-y-1" role="alert" aria-live="polite">
         <p class="font-medium">请修正以下问题后重试：</p>
         <ul class="list-disc list-inside space-y-0.5">
           <li v-for="m in errors" :key="m">{{ m }}</li>
@@ -234,10 +234,10 @@
 
       <div class="flex gap-3 pt-2">
         <button
-          class="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ripple-container"
+          class="flex-1 py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           :class="canPublish && !loading
             ? 'gradient-primary shadow-lg shadow-primary-500/30 hover:shadow-xl hover:shadow-primary-500/40 hover:from-primary-600 hover:via-primary-500 hover:to-accent-600 transform hover:-translate-y-0.5 active:translate-y-0'
-            : 'bg-text-muted/30'"
+            : 'bg-gray-400'"
           :disabled="!canPublish || loading"
           @click="$emit('confirm', local)"
         >
@@ -246,10 +246,10 @@
         </button>
 
         <button
-          class="px-6 py-3.5 rounded-xl font-medium border transition-all flex items-center gap-2 ripple-container"
+          class="px-6 py-3.5 rounded-xl font-medium border transition-all flex items-center gap-2"
           :class="canSaveDraft
-            ? 'text-primary-400 border-primary-500/30 hover:bg-primary-500/10 hover:border-primary-500/50'
-            : 'text-text-muted border-border/50 cursor-not-allowed'"
+            ? 'text-primary-600 border-primary-200 hover:bg-primary-50 hover:border-primary-300'
+            : 'text-text-muted border-border cursor-not-allowed'"
           :disabled="!canSaveDraft || loading"
           @click="$emit('saveDraft', local)"
           aria-label="保存草稿"
