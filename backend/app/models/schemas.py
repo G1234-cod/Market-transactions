@@ -48,6 +48,8 @@ class ExtractResult(BaseModel):
     model: str = ""
     condition: str = ""
     condition_grade: str = ""  # 视觉大模型判定的成色程度：完整/轻微瑕疵/中度瑕疵/重度瑕疵/完全损坏
+    yolo_correct: Optional[bool] = None  # Qwen 对 YOLO 检测结果的语义级判断
+    yolo_judgment: str = ""  # Qwen 对 YOLO 检测结果的评价说明
 
 
 class ExtractResponse(BaseModel):

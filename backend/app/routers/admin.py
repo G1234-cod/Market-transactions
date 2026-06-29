@@ -185,7 +185,7 @@ async def test_model(
 
             client = get_qwen_client()
             messages = [
-                {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
+                {"role": "system", "content": EXTRACT_SYSTEM_PROMPT.replace("{yolo_context}", "（管理后台测试，未启用YOLO检测）")},
                 *client.build_vision_message(image_data_uri, "请识别图片中的二手商品信息"),
             ]
             raw_response = await client.chat(messages)

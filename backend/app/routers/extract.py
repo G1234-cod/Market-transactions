@@ -124,7 +124,32 @@ async def extract(
         logger.info(f"✅ 预处理完成: {preprocess_result['message']}")
 
     # ============================================================
-    # 4. 调用 Qwen-VL-Max 视觉识别
+    # 4. YOLO 先进行初步检测（结果作为上下文喂给 Qwen）
+    # ============================================================
+    yolo_label = 'unknown'
+    yolo_conf = 0.0
+    yolo_detections_raw = []
+    yolo_detector = get_yolo_detector()  # 提前获取，避免 try 块内的作用域问题
+
+    try:
+        yolo_result = yolo_detector.detect(processed_image)
+        
+        if yolo_result:
+            yolo_label = yolo_result[0]['class_name']
+            yolo_conf = yolo_result[0]['confidence']
+            yolo_detections_raw = yolo_result
+            logger.info(f"🔍 YOLO初步检测: {yolo_label} (置信度: {yolo_conf:.2f})")
+        else:
+            logger.info("🔍 YOLO未检测到物品")
+    except Exception as e:
+        logger.error(f"YOLO检测失败: {e}")
+
+    # 构建 YOLO 上下文
+    yolo_ctx = yolo_detector.format_context(yolo_detections_raw)
+    system_prompt = EXTRACT_SYSTEM_PROMPT.replace("{yolo_context}", yolo_ctx)
+
+    # ============================================================
+    # 5. 调用 Qwen-VL-Max 视觉识别（附带 YOLO 上下文）
     # ============================================================
     success = True
     error_msg = None
@@ -145,8 +170,8 @@ async def extract(
 
         client = QwenVLClient()
         messages = [
-            {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
-            *client.build_vision_message(image_data_uri, "请识别图片中的二手商品信息"),
+            {"role": "system", "content": system_prompt},
+            *client.build_vision_message(image_data_uri, "请根据YOLO的检测结果和图片内容，进行精确识别"),
         ]
         raw_response = await client.chat(messages)
         result = vision_service.parse_to_extract_result(raw_response)
@@ -159,46 +184,36 @@ async def extract(
         logger.error(f"Qwen 识别失败: {e}")
 
     # ============================================================
-    # 5. 双模型比对 + 错误数据收集
+    # 6. 基于 Qwen 语义判断收集错题数据
     # ============================================================
     # item_id 说明：此阶段商品尚未创建（published_items 中无记录），
     # 因此使用 -1 表示"未关联到已发布商品"。后续在商品创建后可更新。
     item_id_int = -1
 
     try:
-        yolo_detector = get_yolo_detector()
-        yolo_result = yolo_detector.predict(processed_image)
-        
-        if yolo_result['detections']:
-            yolo_label = yolo_result['detections'][0]['class_name']
-            yolo_conf = yolo_result['detections'][0]['confidence']
-        else:
-            yolo_label = 'unknown'
-            yolo_conf = 0.0
-        
-        if (yolo_label != qwen_label and 
-            qwen_label != 'unknown' and 
-            yolo_label != 'unknown'):
-            
+        if result.yolo_correct is False:
+            # Qwen 判定 YOLO 检测错误 → 存入错题集
             collector = get_data_collector()
             collector.collect(
                 image=processed_image,
-                wrong_label=yolo_label,
+                wrong_label=yolo_label if yolo_label != 'unknown' else 'unknown_preset',
                 correct_label=qwen_label,
                 user_id=user_id,
-                item_id=item_id_int,  # ✅ 使用整数类型
+                item_id=item_id_int,
                 confidence=yolo_conf,
                 save_to_db=True
             )
-            logger.warning(f"⚠️ 模型结果不一致: YOLO={yolo_label}, Qwen={qwen_label}")
+            logger.warning(f"⚠️ Qwen判定YOLO错误: YOLO={yolo_label}, Qwen={qwen_label}, 评价: {result.yolo_judgment}")
+        elif result.yolo_correct is True:
+            logger.info(f"✅ Qwen判定YOLO正确: {result.yolo_judgment}")
         else:
-            logger.info(f"✅ 模型结果一致: {yolo_label}")
+            logger.info(f"ℹ️ Qwen未给出yolo_correct判定")
             
     except Exception as e:
-        logger.error(f"双模型比对失败: {e}")
+        logger.error(f"错题收集失败: {e}")
 
     # ============================================================
-    # 6. 审计日志（失败不影响返回结果）
+    # 7. 审计日志（失败不影响返回结果）
     # ============================================================
     try:
         await audit_service.log_vision_call(
@@ -214,7 +229,7 @@ async def extract(
         logger.error(f"审计日志记录失败（不影响响应）: {e}")
 
     # ============================================================
-    # 7. 返回结果
+    # 8. 返回结果
     # ============================================================
     return ExtractResponse(
         success=success,

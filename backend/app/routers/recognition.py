@@ -254,6 +254,7 @@ async def recognize(
         try:
             detector = get_yolo_detector()
             result = detector.predict(processed_image)
+            raw_detections = result['detections']  # 原始检测列表，供上下文构建
             
             if result['detections']:
                 detection = result['detections'][0]
@@ -263,6 +264,7 @@ async def recognize(
                     'model': detection['class_name'],
                     'confidence': detection['confidence'],
                     'annotated_base64': result['annotated_base64'],
+                    '_detections_raw': raw_detections,  # 供 Qwen 上下文使用
                 }
             else:
                 return {
@@ -271,6 +273,7 @@ async def recognize(
                     'model': '',
                     'confidence': 0.0,
                     'annotated_base64': result['annotated_base64'],
+                    '_detections_raw': [],
                 }
         except Exception as e:
             logger.error(f"❌ YOLO识别失败: {e}")
@@ -280,11 +283,21 @@ async def recognize(
                 'model': '',
                 'confidence': 0.0,
                 'error': str(e),
+                '_detections_raw': [],
             }
 
-    async def run_qwen():
-        """阿里云Qwen-VL识别"""
+    async def run_qwen_with_context(yolo_result):
+        """阿里云Qwen-VL识别（附带YOLO检测结果作为上下文）"""
         try:
+            # 构建 YOLO 上下文文本
+            yolo_detector = get_yolo_detector()
+            yolo_detections = yolo_result.get('_detections_raw', [])
+            yolo_ctx = yolo_detector.format_context(yolo_detections) if yolo_detections else "YOLO 模型未检测到任何物品。"
+
+            # 替换 System Prompt 中的上下文占位
+            system_prompt = EXTRACT_SYSTEM_PROMPT.replace("{yolo_context}", yolo_ctx)
+            logger.info(f"📋 YOLO上下文: {yolo_ctx}")
+
             # ✅ 确保图片尺寸可控：最大 1024px，JPEG 质量 75
             img_for_qwen = processed_image.copy()
             w, h = img_for_qwen.size
@@ -305,13 +318,13 @@ async def recognize(
 
             client = get_qwen_client()
             messages = [
-                {"role": "system", "content": EXTRACT_SYSTEM_PROMPT},
-                *client.build_vision_message(image_data_uri, "请识别图片中的二手商品信息"),
+                {"role": "system", "content": system_prompt},
+                *client.build_vision_message(image_data_uri, "请根据YOLO的检测结果和图片内容，进行精确识别"),
             ]
             raw_response = await client.chat(messages)
             logger.info(f"📡 Qwen-VL 响应: {len(raw_response)}字符")
             result = vision_service.parse_to_extract_result(raw_response)
-            logger.info(f"✅ Qwen-VL: category={result.category}, brand={result.brand}, model={result.model}")
+            logger.info(f"✅ Qwen-VL: category={result.category}, brand={result.brand}, model={result.model}, yolo_correct={result.yolo_correct}")
 
             return {
                 'success': True,
@@ -320,6 +333,8 @@ async def recognize(
                 'model': result.model,
                 'condition': result.condition,
                 'condition_grade': result.condition_grade,
+                'yolo_correct': result.yolo_correct,
+                'yolo_judgment': result.yolo_judgment,
                 'raw_response': raw_response,
             }
         except Exception as e:
@@ -334,6 +349,8 @@ async def recognize(
                 'model': '',
                 'condition': '',
                 'condition_grade': '',
+                'yolo_correct': None,
+                'yolo_judgment': '',
                 'error': str(e),
                 'raw_response': '',
             }
@@ -359,14 +376,16 @@ async def recognize(
                 'error': str(e),
             }
 
-    # 并行执行三个模型
-    yolo_result, qwen_result, defect_result = await asyncio.gather(
+    # 第一阶段：YOLO 和缺陷检测并行执行
+    yolo_result, defect_result = await asyncio.gather(
         run_yolo(),
-        run_qwen(),
         run_defect(),
     )
 
-    logger.info(f"⏱️ 并行推理完成 [{result_id}]: "
+    # 第二阶段：将 YOLO 结果作为上下文，喂给 Qwen-VL 进行语义级裁决
+    qwen_result = await run_qwen_with_context(yolo_result)
+
+    logger.info(f"⏱️ 推理完成 [{result_id}]: "
                 f"YOLO={'success' if yolo_result['success'] else 'failed'}, "
                 f"Qwen={'success' if qwen_result['success'] else 'failed'}, "
                 f"Defect={'success' if defect_result['success'] else 'failed'}")
@@ -424,47 +443,54 @@ async def recognize(
     final_model = qwen_model
     final_condition = qwen_condition
 
-    # ✅ 模型冲突 → 存入错题集 + 数据库
+    # ✅ 由 Qwen 语义判断 YOLO 是否正确（不再做字符串比对）
+    qwen_yolo_correct = qwen_result.get('yolo_correct', None)
+    qwen_yolo_judgment = qwen_result.get('yolo_judgment', '')
+
     disagreement_recorded = False
-    if (yolo_result['success'] and qwen_result['success'] and
-        yolo_category != 'unknown' and qwen_category and
-        yolo_category.lower() != qwen_category.lower()):
+    if yolo_result['success'] and qwen_result['success']:
+        if qwen_yolo_correct is False:
+            # Qwen 判定 YOLO 检测错误 → 存入错题集 + 差异记录
+            logger.warning(f"⚠️ [Qwen判定YOLO错误] [{result_id}]: "
+                          f"YOLO={yolo_category} vs Qwen={qwen_category}, "
+                          f"评价: {qwen_yolo_judgment}")
 
-        logger.warning(f"⚠️ [模型冲突] [{result_id}]: YOLO={yolo_category} vs Qwen-VL={qwen_category}")
+            # 1. 存入错题集（图片 + 标签）
+            try:
+                collector = get_data_collector()
+                collector.collect(
+                    image=processed_image,
+                    wrong_label=yolo_category if yolo_category != 'unknown' else 'unknown_preset',
+                    correct_label=qwen_category,
+                    user_id=user_id or 0,
+                    item_id=None,
+                    confidence=yolo_result.get('confidence', 0.0),
+                    save_to_db=True,
+                )
+                logger.info(f"✅ [错题集] 冲突数据已存入 [{result_id}]")
+            except Exception as e:
+                logger.error(f"❌ [错题集] 存入失败: {e}")
 
-        # 1. 存入错题集（图片 + 标签）
-        try:
-            collector = get_data_collector()
-            collector.collect(
-                image=processed_image,
-                wrong_label=yolo_category,
-                correct_label=qwen_category,
-                user_id=user_id or 0,
-                item_id=None,
-                confidence=yolo_result.get('confidence', 0.0),
-                save_to_db=True,
-            )
-            logger.info(f"✅ [错题集] 冲突数据已存入 [{result_id}]")
-        except Exception as e:
-            logger.error(f"❌ [错题集] 存入失败: {e}")
+            # 2. 存入数据库差异记录
+            try:
+                await crud.insert_model_disagreement(
+                    image_url=image_url,
+                    yolo_category=yolo_category,
+                    yolo_model=yolo_result.get('model', ''),
+                    qwen_category=qwen_category,
+                    qwen_model=qwen_model,
+                    qwen_brand=qwen_brand,
+                    user_id=user_id,
+                    item_id=None,
+                    confidence=yolo_result.get('confidence', 0.0),
+                )
+                disagreement_recorded = True
+                logger.info(f"✅ [数据库] 差异记录已保存 [{result_id}]")
+            except Exception as e:
+                logger.error(f"❌ [数据库] 差异记录保存失败: {e}")
+        else:
+            logger.info(f"✅ [Qwen判定YOLO正确] [{result_id}]: {qwen_yolo_judgment}")
 
-        # 2. 存入数据库差异记录
-        try:
-            await crud.insert_model_disagreement(
-                image_url=image_url,
-                yolo_category=yolo_category,
-                yolo_model=yolo_result.get('model', ''),
-                qwen_category=qwen_category,
-                qwen_model=qwen_model,
-                qwen_brand=qwen_brand,
-                user_id=user_id,
-                item_id=None,
-                confidence=yolo_result.get('confidence', 0.0),
-            )
-            disagreement_recorded = True
-            logger.info(f"✅ [数据库] 差异记录已保存 [{result_id}]")
-        except Exception as e:
-            logger.error(f"❌ [数据库] 差异记录保存失败: {e}")
 
     # ============================================================
     # 6. 保存瑕疵标注图
@@ -613,6 +639,8 @@ async def recognize(
             'yolo_category': yolo_category,
             'qwen_category': qwen_category,
             'yolo_confidence': yolo_result.get('confidence', 0.0),
+            'yolo_correct': qwen_yolo_correct,
+            'yolo_judgment': qwen_yolo_judgment,
         },
         'is_preset': qwen_in_preset,
         'defect_result': {
