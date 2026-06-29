@@ -126,10 +126,10 @@ python train.py
 
 ### 情况 B：已下载好三个 zip 文件（在其他盘）
 
-假设 zip 文件在 `E:\downloads\` 下面：
+假设 zip 文件在下载目录（如 `~/downloads/`）下面：
 
 ```text
-E:\downloads\
+~/downloads/
 ├── train2017.zip                (18GB)
 ├── val2017.zip                  (1GB)
 └── annotations_trainval2017.zip (250MB)
@@ -141,9 +141,9 @@ E:\downloads\
 cd <项目目录>
 mkdir photo
 
-copy E:\downloads\train2017.zip                .
-copy E:\downloads\val2017.zip                  .
-copy E:\downloads\annotations_trainval2017.zip .
+copy ~/downloads/train2017.zip                .
+copy ~/downloads/val2017.zip                  .
+copy ~/downloads/annotations_trainval2017.zip .
 
 tar -xf train2017.zip -C photo
 tar -xf val2017.zip -C photo
@@ -166,10 +166,10 @@ python train.py
 
 ### 情况 C：已经解压好了（在其他盘）
 
-假设已解压在 `E:\coco\`：
+假设已解压在数据目录（如 `~/coco/`）：
 
 ```text
-E:\coco\
+~/coco/
 ├── train2017/               ← 训练图片
 ├── val2017/                 ← 验证图片
 └── annotations/             ← JSON 标注
@@ -182,9 +182,9 @@ E:\coco\
 ```bash
 cd <项目目录>
 mkdir photo
-xcopy /E E:\coco\train2017       photo\train2017\
-xcopy /E E:\coco\val2017         photo\val2017\
-xcopy /E E:\coco\annotations     photo\annotations\
+xcopy /E ~/coco/train2017       photo\train2017\
+xcopy /E ~/coco/val2017         photo\val2017\
+xcopy /E ~/coco/annotations     photo\annotations\
 
 python prepare_data.py
 ```
@@ -194,8 +194,8 @@ python prepare_data.py
 ```bash
 cd <项目目录>
 
-python coco2yolo.py --coco_json E:\coco\annotations\instances_train2017.json --images_dir E:\coco\train2017 --subset train
-python coco2yolo.py --coco_json E:\coco\annotations\instances_val2017.json --images_dir E:\coco\val2017 --subset val
+python coco2yolo.py --coco_json ~/coco/annotations/instances_train2017.json --images_dir ~/coco/train2017 --subset train
+python coco2yolo.py --coco_json ~/coco/annotations/instances_val2017.json --images_dir ~/coco/val2017 --subset val
 ```
 
 > ⚠️ 直接指定路径时图片不会复制到项目目录，训练时需确保 data.yaml 配置正确。

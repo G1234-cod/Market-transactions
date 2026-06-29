@@ -50,8 +50,8 @@ async def get_pool() -> aiomysql.Pool:
                 db=settings.DB_NAME,
                 charset="utf8mb4",
                 autocommit=True,
-                minsize=1,
-                maxsize=10,
+                minsize=2,
+                maxsize=20,  # ✅ 修复：提高连接池大小，支持更高并发
                 pool_recycle=3600,      # 连接回收时间（秒）
                 connect_timeout=10,     # 连接超时
                 echo=False,             # 不打印 SQL 日志

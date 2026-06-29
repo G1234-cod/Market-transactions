@@ -117,11 +117,9 @@ async def rate_limit_dependency(request: Request) -> None:
 
     max_requests, window = limit_config
 
-    # 获取客户端标识（优先使用 X-Forwarded-For）
-    client_ip = (
-        request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or request.client.host if request.client else "unknown"
-    )
+    # ✅ 修复：使用 request.client.host（由 ASGI 服务器提供，不可伪造）
+    # 如需反向代理支持，请在 settings 中配置 TRUSTED_PROXY_IPS
+    client_ip = request.client.host if request.client else "unknown"
     rate_key = f"{path}:{client_ip}"
 
     limiter = get_limiter()
@@ -138,6 +136,28 @@ async def rate_limit_dependency(request: Request) -> None:
             },
             headers={"Retry-After": str(int(retry_after + 1))},
         )
+
+
+# ============================================================
+# ✅ 定期清理：防止内存泄漏
+# ============================================================
+async def periodic_cleanup(interval: int = 300):
+    """定期清理所有过期的限流记录（每5分钟）"""
+    import asyncio as _asyncio
+    while True:
+        await _asyncio.sleep(interval)
+        limiter = get_limiter()
+        async with limiter._lock:
+            now = time.monotonic()
+            # 清理超过 10 分钟未活跃的 key
+            stale_keys = [
+                k for k, timestamps in limiter._windows.items()
+                if not timestamps or now - timestamps[-1] > 600
+            ]
+            for k in stale_keys:
+                del limiter._windows[k]
+            if stale_keys:
+                logger.debug(f"🧹 限流内存清理: 移除 {len(stale_keys)} 个过期 key")
 
 
 # ============================================================
@@ -159,10 +179,8 @@ def create_rate_limit(max_requests: int, window: float = 60.0):
     """
     async def _limiter(request: Request) -> None:
         path = request.url.path.rstrip("/")
-        client_ip = (
-            request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-            or request.client.host if request.client else "unknown"
-        )
+        # ✅ 修复：使用 request.client.host
+        client_ip = request.client.host if request.client else "unknown"
         rate_key = f"custom:{path}:{client_ip}"
 
         limiter = get_limiter()

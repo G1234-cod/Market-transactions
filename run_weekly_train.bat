@@ -4,11 +4,7 @@ echo 每周自动模型训练
 echo 开始时间: %date% %time%
 echo ========================================
 
-<<<<<<< HEAD
-cd /d E:\Market-transactions
-=======
 cd /d %~dp0
->>>>>>> feature/NXF-LGTM
 
 echo 激活虚拟环境...
 call .venv\Scripts\activate

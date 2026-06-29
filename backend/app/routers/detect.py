@@ -3,6 +3,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
 from PIL import Image
 import io
 import logging
+import threading
 
 from app.ml.yolo_detector import YOLODetector
 from app.utils.preprocess import get_preprocessor
@@ -15,13 +16,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["YOLO检测"])
 
 _detector = None
+_detector_lock = threading.Lock()
 
 
 def get_detector():
     global _detector
-    if _detector is None:
+    if _detector is not None:
+        return _detector
+    with _detector_lock:
+        if _detector is not None:
+            return _detector
         _detector = YOLODetector()
-    return _detector
+        return _detector
 
 
 @router.post("/yolo/detect")

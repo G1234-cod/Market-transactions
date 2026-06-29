@@ -136,17 +136,22 @@ class DeepSeekPriceClient:
                     response_format={"type": "json_object"},
                     **extra_kwargs,
                 )
-            except Exception:
-                logger.warning("⚠️ response_format 不支持，回退到普通调用")
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "你是专业的二手商品估价专家，请根据商品信息和瑕疵情况给出合理的价格建议。请仅输出 JSON，不要包含其他文字。"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    **extra_kwargs,
-                )
-            
+            except Exception as _format_err:
+                # ✅ 修复：仅在不支持 response_format 时才回退，不吞掉所有错误
+                err_str = str(_format_err).lower()
+                if 'response_format' in err_str or 'json_object' in err_str or 'not support' in err_str:
+                    logger.warning("⚠️ response_format 不支持，回退到普通调用")
+                    response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": "你是专业的二手商品估价专家，请根据商品信息和瑕疵情况给出合理的价格建议。请仅输出 JSON，不要包含其他文字。"},
+                            {"role": "user", "content": prompt}
+                        ],
+                        **extra_kwargs,
+                    )
+                else:
+                    raise  # 其他错误（网络、认证等）重新抛出
+
             # 解析返回结果
             if not response.choices:
                 return {
@@ -155,20 +160,32 @@ class DeepSeekPriceClient:
                     'suggestion': '请稍后重试'
                 }
             content = response.choices[0].message.content
-            
-            # 提取 JSON
-            import re
-            json_match = re.search(r'\{.*\}', content, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                result['success'] = True
-                return result
-            else:
-                return {
-                    'success': False,
-                    'error': '无法解析 DeepSeek 返回结果',
-                    'raw_response': content
-                }
+
+            # ✅ 修复：使用平衡括号匹配提取 JSON（支持嵌套）
+            import re as _re
+            start = content.find('{')
+            if start >= 0:
+                depth = 0
+                end = start
+                for i in range(start, len(content)):
+                    if content[i] == '{':
+                        depth += 1
+                    elif content[i] == '}':
+                        depth -= 1
+                        if depth == 0:
+                            end = i + 1
+                            break
+                try:
+                    result = json.loads(content[start:end])
+                    result['success'] = True
+                    return result
+                except json.JSONDecodeError:
+                    pass
+            return {
+                'success': False,
+                'error': '无法解析 DeepSeek 返回结果',
+                'raw_response': content[:500]
+            }
                 
         except Exception as e:
             logger.error(f"DeepSeek 定价调用失败: {e}")

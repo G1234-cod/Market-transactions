@@ -11,6 +11,7 @@ import torch
 from ultralytics import YOLO
 from PIL import Image, ImageDraw
 import logging
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -413,13 +414,17 @@ class DefectDetector:
             
             severity_count[d['severity']] = severity_count.get(d['severity'], 0) + 1
         
+        # ✅ R4: 计算成色分级
+        condition_grade = self.grade_condition(severity_count)
+
         return {
             'bg_removed': image,
             'annotated': annotated,
             'defects': defects_for_frontend,
             'defects_for_ds': defects_for_ds,
             'defect_count': len(defects),
-            'severity_summary': severity_count
+            'severity_summary': severity_count,
+            'condition_grade': condition_grade,
         }
     
     def get_defects_for_deepseek(self, defects: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -466,12 +471,62 @@ class DefectDetector:
             'total': len(defects)
         }
 
+    # ============================================================
+    # ✅ R4: 5级成色分级
+    # ============================================================
+    CONDITION_GRADES = {
+        0: "完整",
+        1: "轻微瑕疵",
+        2: "中度瑕疵",
+        3: "重度瑕疵",
+        4: "完全损坏",
+    }
+
+    def grade_condition(self, severity_summary: Dict[str, int]) -> Dict[str, Any]:
+        """
+        根据瑕疵严重程度汇总，返回5级成色分级
+
+        Args:
+            severity_summary: {'severe': N, 'moderate': N, 'minor': N, 'slight': N}
+
+        Returns:
+            {'grade': int 0-4, 'grade_label': str, 'defect_count': int, 'severity_summary': dict}
+        """
+        severe = severity_summary.get('severe', 0)
+        moderate = severity_summary.get('moderate', 0)
+        minor = severity_summary.get('minor', 0)
+        slight = severity_summary.get('slight', 0)
+        total = severe + moderate + minor + slight
+
+        if total == 0:
+            grade = 0   # 完整
+        elif severe >= 3:
+            grade = 4   # 完全损坏
+        elif severe >= 1:
+            grade = 3   # 重度瑕疵
+        elif moderate >= 2:
+            grade = 2   # 中度瑕疵
+        elif moderate >= 1 or minor >= 2:
+            grade = 2   # 中度瑕疵
+        elif minor >= 1 or slight >= 1:
+            grade = 1   # 轻微瑕疵
+        else:
+            grade = 1   # 轻微瑕疵（兜底）
+
+        return {
+            'grade': grade,
+            'grade_label': self.CONDITION_GRADES[grade],
+            'defect_count': total,
+            'severity_summary': severity_summary,
+        }
+
 
 # ============================================================
-# 单例实例（懒加载）
+# 单例实例（懒加载，线程安全）
 # ============================================================
 
 _defect_detector: Optional[DefectDetector] = None
+_defect_detector_lock = threading.Lock()
 
 
 def get_defect_detector(
@@ -479,22 +534,30 @@ def get_defect_detector(
     conf_threshold: float = 0.3
 ) -> DefectDetector:
     """
-    获取瑕疵检测器单例
-    
+    获取瑕疵检测器单例（线程安全）
+
     Args:
         model_path: 模型路径（仅首次调用时生效）
         conf_threshold: 置信度阈值（仅首次调用时生效）
-    
+
     Returns:
         DefectDetector 实例
     """
     global _defect_detector
-    if _defect_detector is None:
+
+    # ✅ 快速路径（无锁）
+    if _defect_detector is not None:
+        return _defect_detector
+
+    # ✅ 慢速路径（有锁，双重检查）
+    with _defect_detector_lock:
+        if _defect_detector is not None:
+            return _defect_detector
         _defect_detector = DefectDetector(
             model_path=model_path,
             conf_threshold=conf_threshold
         )
-    return _defect_detector
+        return _defect_detector
 
 
 # ============================================================

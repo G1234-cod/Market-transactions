@@ -4,13 +4,13 @@ COCO / class-folder → YOLO 格式转换
 支持两种来源，统一输出到 dataset/ 目录：
 
 用法:
-    cd D:\train-general
+    cd trainzui/train1
 
     # 方式1: COCO JSON
-    python coco2yolo.py --coco_json D:/data/annotations.json --images_dir D:/data/images
+    python coco2yolo.py --coco_json annotations.json --images_dir images
 
     # 方式2: class 子文件夹（如 images/train/0/ images/train/1/ ...）
-    python coco2yolo.py --from_folders D:/data/train
+    python coco2yolo.py --from_folders data/train
 
 输出结构 (train.py 直接可用):
     dataset/
@@ -497,10 +497,10 @@ def main():
 === 其他用法 ===
 
   # 一份 JSON 自动切分 train/val
-  python coco2yolo.py --coco_json D:/data/annotations.json --images_dir D:/data/images
+  python coco2yolo.py --coco_json annotations.json --images_dir images
 
   # Class 子文件夹打平
-  python coco2yolo.py --from_folders D:/data/train
+  python coco2yolo.py --from_folders data/train
 
   # 调整切分比例
   python coco2yolo.py --coco_json ann.json --split 0.8
@@ -554,7 +554,7 @@ def main():
         print("  请指定 --coco_json 或 --from_folders\n")
         print("  示例:")
         print("    python coco2yolo.py --coco_json annotations.json --images_dir images")
-        print("    python coco2yolo.py --from_folders D:/data/train")
+        print("    python coco2yolo.py --from_folders data/train")
         sys.exit(1)
 
 

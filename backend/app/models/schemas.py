@@ -16,6 +16,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    role: str = "user"  # "user" 或 "admin"
 
 
 class LoginResponse(BaseModel):
@@ -25,6 +26,7 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     user_id: int
     username: str
+    role: str = "user"
     message: str = "登录成功"
 
 
@@ -45,6 +47,7 @@ class ExtractResult(BaseModel):
     brand: str = ""
     model: str = ""
     condition: str = ""
+    condition_grade: str = ""  # 视觉大模型判定的成色程度：完整/轻微瑕疵/中度瑕疵/重度瑕疵/完全损坏
 
 
 class ExtractResponse(BaseModel):
@@ -137,11 +140,12 @@ class MarketItem(BaseModel):
     ai_generated_desc: Optional[str] = None
     suggested_price: Optional[float] = None
     category: Optional[str] = None
-    condition: Optional[str] = None  # ✅ 改为 condition
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    condition: Optional[str] = None
     views: int = 0
     created_at: str
 
-    # ✅ 兼容旧字段名
     @property
     def item_condition(self) -> Optional[str]:
         return self.condition
@@ -250,6 +254,14 @@ class DefectInfoDS(BaseModel):
     severity_label: str        # 重度/中度/轻度/轻微
 
 
+class ConditionGrade(BaseModel):
+    """✅ R4: 5级成色分级"""
+    grade: int                 # 0=完好, 1=轻量损伤, 2=中量损伤, 3=重量损伤, 4=已报废
+    grade_label: str           # 完好/轻量损伤/中量损伤/重量损伤/已报废
+    defect_count: int          # 瑕疵总数
+    severity_summary: dict     # {severe: N, moderate: N, minor: N, slight: N}
+
+
 class ProcessImageResponse(BaseModel):
     """全链路图片处理响应"""
     success: bool
@@ -311,3 +323,29 @@ class BaseResponse(BaseModel):
     message: str = ""
     error: Optional[str] = None
     timestamp: str = ""
+
+
+# ============================================================
+# 价格历史
+# ============================================================
+
+class PricePoint(BaseModel):
+    """价格数据点"""
+    date: str                    # 日期 YYYY-MM-DD
+    price: float                 # 价格
+    count: int = 1              # 该日记录数
+    source: str = "real"        # 数据来源: real / published / estimated
+
+
+class PriceHistoryResponse(BaseModel):
+    """价格历史响应"""
+    brand: str
+    model: str
+    total_records: int = 0       # 总记录数
+    avg_price: float = 0         # 平均价格
+    min_price: float = 0         # 最低价格
+    max_price: float = 0         # 最高价格
+    price_points: List[PricePoint] = []  # 价格时间序列
+    has_estimated_data: bool = False    # 是否包含 AI 估算数据
+    estimate_analysis: Optional[str] = None  # AI 估算分析说明
+    estimate_source: Optional[str] = None    # AI 估算来源 (ai_estimated / fallback_estimate)

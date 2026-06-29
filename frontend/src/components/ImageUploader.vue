@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, watch, defineEmits, defineProps } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({ modelValue: { type: File, default: null } })
 const emit = defineEmits(['update:modelValue'])
@@ -83,14 +83,20 @@ function handleDrop(e) {
 
 async function processFile(file) {
   if (!file.type.startsWith('image/')) return
-  
+
   compressing.value = true
-  
+
+  // ✅ 修复：释放旧的 Object URL 防止内存泄漏
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+
   try {
     const compressed = await compressImage(file)
     previewUrl.value = URL.createObjectURL(compressed)
     emit('update:modelValue', compressed)
-  } catch {
+  } catch (err) {
+    console.warn('图片压缩失败，使用原始文件:', err)
     previewUrl.value = URL.createObjectURL(file)
     emit('update:modelValue', file)
   } finally {
@@ -141,6 +147,10 @@ function clearImage() {
 watch(() => props.modelValue, (file) => {
   if (file && !previewUrl.value) {
     previewUrl.value = URL.createObjectURL(file)
+  } else if (!file && previewUrl.value) {
+    // ✅ 修复：prop 置空时清预览
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
   }
 })
 </script>

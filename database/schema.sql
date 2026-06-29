@@ -1,202 +1,261 @@
 -- ============================================================
--- 智能二手商品发布助手 - 完整数据库建表
+-- 智能二手商品发布助手 — 数据库建表脚本
+-- ============================================================
+-- 使用方法（在新机器上）：
+--   1. 安装 MySQL 8.0+
+--   2. 打开终端，进入此文件所在目录
+--   3. mysql -u root -p < schema.sql
+--   4. 输入 root 密码，等待执行完成
 -- ============================================================
 
+-- 创建数据库
 CREATE DATABASE IF NOT EXISTS `market_transactions`
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_unicode_ci;
 
 USE `market_transactions`;
 
--- ------------------------------------------------------------
--- 1. users - 用户表
--- ------------------------------------------------------------
+-- ============================================================
+-- 1. users — 用户表
+-- ============================================================
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
-  `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '用户ID',
-  `username`      VARCHAR(50)  NOT NULL UNIQUE                COMMENT '用户名',
-  `password_hash` VARCHAR(128) NOT NULL DEFAULT ''             COMMENT '密码哈希',
-  `email`         VARCHAR(100) NULL     DEFAULT NULL          COMMENT '邮箱',
-  `phone`         VARCHAR(20)  NULL     DEFAULT NULL          COMMENT '手机号',
-  `avatar_url`    VARCHAR(500) NULL     DEFAULT NULL          COMMENT '头像URL',
-  `status`        VARCHAR(20)  NOT NULL DEFAULT 'active'      COMMENT '状态: active/inactive/locked/deleted',
-  `role`          VARCHAR(20)  NOT NULL DEFAULT 'user'        COMMENT '角色: user/admin',
-  `last_login`    DATETIME     NULL     DEFAULT NULL          COMMENT '最后登录时间',
-  `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
-  `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `password_hash` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `email` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `avatar_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+  `role` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'user',
+  `last_login` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
+  UNIQUE KEY `username` (`username`),
+  KEY `idx_status` (`status`),
+  KEY `idx_role` (`role`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ------------------------------------------------------------
--- 2. market_prices - 二手行情基准表
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `market_prices`;
-CREATE TABLE `market_prices` (
-  `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '行情ID',
-  `category`    VARCHAR(50)   NOT NULL                COMMENT '品类',
-  `brand`       VARCHAR(50)   NOT NULL                COMMENT '品牌',
-  `model`       VARCHAR(100)  NOT NULL                COMMENT '型号',
-  `avg_price`   DECIMAL(10,2) NOT NULL                COMMENT '均价',
-  `low_price`   DECIMAL(10,2) NOT NULL                COMMENT '最低参考价',
-  `high_price`  DECIMAL(10,2) NOT NULL                COMMENT '最高参考价',
-  `price_unit`  VARCHAR(10)   NOT NULL DEFAULT 'CNY'  COMMENT '货币单位',
-  `data_source` VARCHAR(50)   NULL     DEFAULT NULL   COMMENT '数据来源',
-  `is_active`   TINYINT(1)    NOT NULL DEFAULT 1      COMMENT '是否启用',
-  `created_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_brand_model` (`brand`, `model`),
-  INDEX `idx_category` (`category`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='二手行情基准表';
-
--- ------------------------------------------------------------
--- 3. published_items - 商品发布表（核心业务表）
--- ------------------------------------------------------------
+-- ============================================================
+-- 2. published_items — 已发布商品表
+-- ============================================================
 DROP TABLE IF EXISTS `published_items`;
 CREATE TABLE `published_items` (
-  `id`                 BIGINT        NOT NULL AUTO_INCREMENT COMMENT '商品ID',
-  `user_id`            BIGINT        NOT NULL                COMMENT '发布者ID',
-  `original_image_url` VARCHAR(500)  NOT NULL                COMMENT '原始图片URL',
-  `bg_removed_url`     VARCHAR(500)  NULL     DEFAULT NULL   COMMENT '去背景图URL',
-  `annotated_url`      VARCHAR(500)  NULL     DEFAULT NULL   COMMENT '瑕疵标注图URL',
-  `defect_count`       INT           NOT NULL DEFAULT 0      COMMENT '瑕疵数量',
-  `defect_data`        JSON          NULL     DEFAULT NULL   COMMENT '瑕疵详细数据(位置/程度)',
-  `ai_generated_title` VARCHAR(200)  NOT NULL DEFAULT ''     COMMENT 'AI生成标题',
-  `ai_generated_desc`  TEXT          NULL                    COMMENT 'AI生成描述',
-  `suggested_price`    DECIMAL(10,2) NULL     DEFAULT NULL   COMMENT '建议价格',
-  `category`           VARCHAR(50)   NULL     DEFAULT NULL   COMMENT '品类（手机/笔记本/平板等）',
-  `brand`              VARCHAR(50)   NULL     DEFAULT NULL   COMMENT '品牌（Apple/华为/小米等）',
-  `model`              VARCHAR(100)  NULL     DEFAULT NULL   COMMENT '型号（iPhone 13/Mate 60等）',
-  `condition`          VARCHAR(200)  NULL     DEFAULT NULL   COMMENT '成色描述',
-  `status`             VARCHAR(20)   NOT NULL DEFAULT 'draft' COMMENT '状态: draft/published/delisted',
-  `views`              INT           NOT NULL DEFAULT 0      COMMENT '浏览次数',
-  `retry_count`        INT           NOT NULL DEFAULT 0      COMMENT '重试次数',
-  `created_at`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `original_image_url` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bg_removed_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `annotated_url` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `defect_count` int NOT NULL DEFAULT '0',
+  `defect_types` json DEFAULT NULL,
+  `defect_data` json DEFAULT NULL,
+  `ai_generated_title` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `ai_generated_desc` text COLLATE utf8mb4_unicode_ci,
+  `suggested_price` decimal(10,2) DEFAULT NULL,
+  `category` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `brand` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `model` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `condition` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
+  `review_status` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'normal',
+  `views` int NOT NULL DEFAULT '0',
+  `likes` int NOT NULL DEFAULT '0',
+  `retry_count` int NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_user_id` (`user_id`),
-  INDEX `idx_status` (`status`),
-  INDEX `idx_category` (`category`),
-  INDEX `idx_created_at` (`created_at`),
-  CONSTRAINT `fk_published_items_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品发布表';
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_category` (`category`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_status_category` (`status`,`category`),
+  KEY `idx_brand_model` (`brand`,`model`),
+  KEY `idx_status_category_brand` (`status`,`category`,`brand`),
+  CONSTRAINT `fk_pub_items_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ------------------------------------------------------------
--- 4. ai_audit_logs - AI审计日志表
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `ai_audit_logs`;
-CREATE TABLE `ai_audit_logs` (
-  `id`                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '日志ID',
-  `user_id`           BIGINT       NOT NULL                COMMENT '用户ID',
-  `action_type`       VARCHAR(30)  NOT NULL                COMMENT 'action_type: vision_extract/text_generate/price_query/defect_detect',
-  `model_name`        VARCHAR(50)  NOT NULL                COMMENT '模型名称',
-  `input_summary`     VARCHAR(500) NULL                    COMMENT '输入摘要',
-  `raw_ai_response`   JSON         NULL                    COMMENT 'AI原始响应（JSON格式）',
-  `execution_time_ms` INT          NOT NULL DEFAULT 0      COMMENT '耗时(毫秒)',
-  `status`            VARCHAR(10)  NOT NULL DEFAULT 'SUCCESS' COMMENT '状态: SUCCESS/FAILED',
-  `error_message`     TEXT         NULL                    COMMENT '错误信息',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+-- ============================================================
+-- 3. market_prices — 市场行情表
+-- ============================================================
+DROP TABLE IF EXISTS `market_prices`;
+CREATE TABLE `market_prices` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `category` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `brand` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `model` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `avg_price` decimal(10,2) NOT NULL,
+  `low_price` decimal(10,2) NOT NULL,
+  `high_price` decimal(10,2) NOT NULL,
+  `price_unit` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'CNY',
+  `data_source` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_user_id` (`user_id`),
-  INDEX `idx_status` (`status`),
-  INDEX `idx_action_type` (`action_type`),
-  INDEX `idx_created_at` (`created_at`),
-  CONSTRAINT `fk_audit_logs_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI审计日志表';
+  UNIQUE KEY `uk_brand_model` (`brand`,`model`),
+  KEY `idx_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ------------------------------------------------------------
--- 5. hard_cases - 错题本（错误数据收集）
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `hard_cases`;
-CREATE TABLE `hard_cases` (
-  `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '错题ID',
-  `image_url`     VARCHAR(500) NOT NULL                COMMENT '错误图片URL',
-  `wrong_label`   VARCHAR(100) NOT NULL                COMMENT '本地模型错误分类',
-  `correct_label` VARCHAR(100) NOT NULL                COMMENT 'Qwen正确分类',
-  `model_version` VARCHAR(50)  NULL     DEFAULT NULL   COMMENT '当时模型版本',
-  `user_id`       BIGINT       NULL     DEFAULT NULL   COMMENT '触发用户ID',
-  `item_id`       BIGINT       NULL     DEFAULT NULL   COMMENT '关联商品ID',
-  `confidence`    DECIMAL(5,4) NULL     DEFAULT NULL   COMMENT '模型置信度',
-  `retry_count`   INT          NOT NULL DEFAULT 0      COMMENT '重试次数',
-  `is_fixed`      TINYINT(1)   NOT NULL DEFAULT 0      COMMENT '是否已修复',
-  `fixed_at`      DATETIME     NULL     DEFAULT NULL   COMMENT '修复时间',
-  `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_error_case` (`image_url`, `wrong_label`, `correct_label`),  -- ✅ 防止重复数据
-  INDEX `idx_wrong_label` (`wrong_label`),
-  INDEX `idx_correct_label` (`correct_label`),
-  INDEX `idx_is_fixed` (`is_fixed`),
-  INDEX `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='错题本';
-
--- ------------------------------------------------------------
--- 7. feature_vectors - 特征向量表（以图搜图备用）
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `feature_vectors`;
-CREATE TABLE `feature_vectors` (
-  `id`             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '特征ID',
-  `item_id`        BIGINT       NOT NULL UNIQUE           COMMENT '商品ID',
-  `feature_vector` BLOB         NOT NULL                COMMENT '特征向量(二进制)',
-  `model_name`     VARCHAR(50)  NOT NULL DEFAULT 'clip_ViT-B/32' COMMENT '特征提取模型',
-  `created_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_feature_item` FOREIGN KEY (`item_id`) REFERENCES `published_items` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='特征向量表';
-
--- ------------------------------------------------------------
--- 8. price_history - 价格历史表
--- ------------------------------------------------------------
+-- ============================================================
+-- 4. price_history — 价格历史表
+-- ============================================================
 DROP TABLE IF EXISTS `price_history`;
 CREATE TABLE `price_history` (
-  `id`          BIGINT        NOT NULL AUTO_INCREMENT COMMENT '历史ID',
-  `brand`       VARCHAR(50)   NOT NULL                COMMENT '品牌',
-  `model`       VARCHAR(100)  NOT NULL                COMMENT '型号',
-  `price`       DECIMAL(10,2) NOT NULL                COMMENT '价格',
-  `price_type`  VARCHAR(20)   NOT NULL DEFAULT 'avg'  COMMENT 'avg/low/high',
-  `source`      VARCHAR(50)   NULL     DEFAULT NULL   COMMENT '数据来源',
-  `recorded_at` DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `brand` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `model` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `price` decimal(10,2) NOT NULL,
+  `price_type` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'avg',
+  `source` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `recorded_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_brand_model` (`brand`, `model`),
-  INDEX `idx_recorded_at` (`recorded_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='价格历史表';
+  KEY `idx_brand_model` (`brand`,`model`),
+  KEY `idx_recorded_at` (`recorded_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ------------------------------------------------------------
--- 9. 测试数据
--- ------------------------------------------------------------
+-- ============================================================
+-- 5. feature_vectors — 图片特征向量表（以图搜图）
+-- ============================================================
+DROP TABLE IF EXISTS `feature_vectors`;
+CREATE TABLE `feature_vectors` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `item_id` bigint NOT NULL,
+  `feature_vector` blob NOT NULL,
+  `model_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'clip_ViT-B/32',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `item_id` (`item_id`),
+  CONSTRAINT `fk_feature_item` FOREIGN KEY (`item_id`) REFERENCES `published_items` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 测试用户（密码：test123）
-INSERT INTO `users` (`username`, `password_hash`) VALUES 
-('test_user', '0123456789abcdef0123456789abcdef:9b8767d9a5f8c1e2b3d4f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8'),
-('test_admin', 'fedcba9876543210fedcba9876543210:8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d');
+-- ============================================================
+-- 6. hard_cases — 模型错误案例表（数据飞轮）
+-- ============================================================
+DROP TABLE IF EXISTS `hard_cases`;
+CREATE TABLE `hard_cases` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `wrong_label` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `correct_label` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `model_version` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_id` bigint DEFAULT NULL,
+  `item_id` bigint DEFAULT NULL,
+  `confidence` decimal(5,4) DEFAULT NULL,
+  `retry_count` int NOT NULL DEFAULT '0',
+  `is_fixed` tinyint(1) NOT NULL DEFAULT '0',
+  `fixed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_error_case` (`image_url`(255),`wrong_label`,`correct_label`),
+  KEY `idx_wrong_label` (`wrong_label`),
+  KEY `idx_correct_label` (`correct_label`),
+  KEY `idx_is_fixed` (`is_fixed`),
+  KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 行情数据
-INSERT INTO `market_prices` (`category`, `brand`, `model`, `avg_price`, `low_price`, `high_price`) VALUES
-('手机', 'Apple', 'iPhone 13', 3200.00, 2800.00, 3800.00),
-('手机', 'Apple', 'iPhone 14', 4100.00, 3600.00, 4700.00),
-('手机', 'Apple', 'iPhone 15', 5200.00, 4800.00, 5800.00),
-('手机', 'HUAWEI', 'Mate 40 Pro', 2500.00, 2000.00, 3100.00),
-('手机', 'HUAWEI', 'Mate 60', 4500.00, 4000.00, 5000.00),
-('手机', 'Xiaomi', '小米13', 2500.00, 2200.00, 2800.00),
-('手机', 'Xiaomi', '小米14', 3500.00, 3200.00, 3800.00),
-('笔记本', 'Apple', 'MacBook Air M1', 4200.00, 3500.00, 5000.00),
-('笔记本', 'Apple', 'MacBook Pro 14', 12000.00, 10000.00, 14000.00),
-('笔记本', 'Lenovo', 'ThinkPad X1', 3500.00, 2800.00, 4300.00),
-('平板', 'Apple', 'iPad Air 5', 3000.00, 2500.00, 3600.00),
-('平板', 'Apple', 'iPad Pro 12.9', 6000.00, 5500.00, 6500.00),
-('外设', 'Logitech', 'G610 机械键盘', 220.00, 150.00, 300.00),
-('耳机', 'Apple', 'AirPods Pro 2', 1000.00, 800.00, 1300.00),
-('耳机', 'Sony', 'WH-1000XM5', 2000.00, 1800.00, 2200.00),
-('手表', 'Apple', 'Watch S8', 2500.00, 2200.00, 2800.00);
+-- ============================================================
+-- 7. ai_audit_logs — AI 调用审计日志表
+-- ============================================================
+DROP TABLE IF EXISTS `ai_audit_logs`;
+CREATE TABLE `ai_audit_logs` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `action_type` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `model_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `input_summary` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `raw_ai_response` json DEFAULT NULL,
+  `execution_time_ms` int NOT NULL DEFAULT '0',
+  `status` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'SUCCESS',
+  `error_message` text COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_action_type` (`action_type`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ------------------------------------------------------------
--- 10. 验证查询
--- ------------------------------------------------------------
--- SHOW TABLES;
--- SELECT * FROM users;
--- SELECT * FROM market_prices;
--- SELECT COUNT(*) FROM published_items;
--- SELECT COUNT(*) FROM hard_cases;
--- SELECT COUNT(*) FROM ai_audit_logs;
+-- ============================================================
+-- 8. category_brands — 品类品牌对照表
+-- ============================================================
+DROP TABLE IF EXISTS `category_brands`;
+CREATE TABLE `category_brands` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `category` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `brand` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_category_brand` (`category`,`brand`),
+  KEY `idx_category` (`category`),
+  KEY `idx_brand` (`brand`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 9. model_disagreements — 模型分歧记录表
+-- ============================================================
+DROP TABLE IF EXISTS `model_disagreements`;
+CREATE TABLE `model_disagreements` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `image_url` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `yolo_category` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `yolo_model` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `qwen_category` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `qwen_model` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `qwen_brand` varchar(50) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `user_id` bigint DEFAULT NULL,
+  `item_id` bigint DEFAULT NULL,
+  `confidence` decimal(5,4) DEFAULT NULL,
+  `is_used_for_training` tinyint(1) NOT NULL DEFAULT '0',
+  `training_used_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_yolo_category` (`yolo_category`),
+  KEY `idx_qwen_category` (`qwen_category`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_is_used_for_training` (`is_used_for_training`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 10. model_metrics — 模型训练指标表
+-- ============================================================
+DROP TABLE IF EXISTS `model_metrics`;
+CREATE TABLE `model_metrics` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `model_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `training_date` datetime NOT NULL,
+  `accuracy` decimal(5,4) DEFAULT NULL,
+  `precision` decimal(5,4) DEFAULT NULL,
+  `recall` decimal(5,4) DEFAULT NULL,
+  `f1_score` decimal(5,4) DEFAULT NULL,
+  `training_data_count` int DEFAULT NULL,
+  `epoch` int DEFAULT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_model_name` (`model_name`),
+  KEY `idx_training_date` (`training_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 11. notifications — 通知表
+-- ============================================================
+DROP TABLE IF EXISTS `notifications`;
+CREATE TABLE `notifications` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` bigint NOT NULL,
+  `item_id` bigint DEFAULT NULL,
+  `type` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `message` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_is_read` (`is_read`),
+  KEY `idx_created_at` (`created_at`),
+  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

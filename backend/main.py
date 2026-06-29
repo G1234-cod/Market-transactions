@@ -1,6 +1,7 @@
 """FastAPI 应用入口"""
 import os
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,9 +15,13 @@ from app.routers import (
     generate,
     history,
     market,
+    notifications,
     price,
+    price_history,
     process,
+    recognition,
     search,
+    admin,
 )
 from app.config import settings
 from app.db.connection import init_db, shutdown_db
@@ -25,7 +30,55 @@ from app.db.connection import init_db, shutdown_db
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="智能二手商品发布助手", version="1.0.0")
+
+# ============================================================
+# ✅ 应用生命周期管理（使用 lifespan 替代弃用的 on_event）
+# ============================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用启动/关闭生命周期管理"""
+    logger.info("🚀 应用启动中...")
+    await init_db()
+
+    # 启动时验证配置
+    from app.config import validate_config
+    config_errors = validate_config()
+    if config_errors:
+        for err in config_errors:
+            if err.startswith("❌"):
+                logger.error(f"配置错误: {err}")
+            else:
+                logger.warning(f"配置警告: {err}")
+
+    # 启动后台限流清理任务
+    cleanup_task = None
+    try:
+        from app.middleware.rate_limit import periodic_cleanup
+        import asyncio as _asyncio
+        cleanup_task = _asyncio.create_task(periodic_cleanup())
+    except Exception as e:
+        logger.warning(f"⚠️ 后台限流清理任务启动失败: {e}")
+
+    # ✅ 启动每周自动训练调度器
+    try:
+        from app.routers.admin import start_weekly_scheduler
+        start_weekly_scheduler()
+    except Exception as e:
+        logger.warning(f"⚠️ 每周自动训练调度器启动失败: {e}")
+
+    logger.info("✅ 应用启动完成")
+
+    yield  # 应用运行中
+
+    logger.info("🔄 应用关闭中...")
+    if cleanup_task:
+        cleanup_task.cancel()
+    await shutdown_db()
+    logger.info("✅ 应用已关闭")
+
+
+app = FastAPI(title="智能二手商品发布助手", version="1.0.0", lifespan=lifespan)
 
 
 # ============================================================
@@ -41,42 +94,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self'; "
+            "font-src 'self'; "
+            "object-src 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
         if settings.ENV == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
-
-
-# ============================================================
-# 应用生命周期管理
-# ============================================================
-
-@app.on_event("startup")
-async def startup():
-    """应用启动时初始化资源"""
-    logger.info("🚀 应用启动中...")
-    await init_db()
-
-    # 启动时验证配置
-    from app.config import validate_config
-    config_errors = validate_config()
-    if config_errors:
-        for err in config_errors:
-            if err.startswith("❌"):
-                logger.error(f"配置错误: {err}")
-            else:
-                logger.warning(f"配置警告: {err}")
-
-    logger.info("✅ 应用启动完成")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    """应用关闭时释放资源"""
-    logger.info("🔄 应用关闭中...")
-    await shutdown_db()
-    logger.info("✅ 应用已关闭")
 
 
 # ============================================================
@@ -89,9 +122,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # ✅ 收紧：仅允许实际使用的 HTTP 方法
-    allow_headers=["Authorization", "Content-Type", "Accept"],   # ✅ 收紧：仅允许必要请求头
-    expose_headers=["Content-Type"],                              # ✅ 收紧：仅暴露必要响应头
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+    expose_headers=["Content-Type"],
     max_age=600,
 )
 
@@ -107,18 +140,22 @@ app.include_router(generate.router, prefix="/api/v1")
 app.include_router(history.router, prefix="/api/v1")
 app.include_router(market.router, prefix="/api/v1")
 app.include_router(price.router, prefix="/api/v1")
+app.include_router(price_history.router, prefix="/api/v1")
 app.include_router(process.router, prefix="/api/v1")
+app.include_router(recognition.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
 
 
 # ============================================================
 # 挂载静态文件目录
 # ============================================================
 
-# 确保上传目录存在（config.ensure_directories() 中已创建，此处作为兜底）
+# 确保上传目录存在
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-# 静态文件目录相对于项目根目录
-static_dir = str(settings.BASE_DIR / settings.UPLOAD_DIR.split("/")[0])
+# ✅ 修复：使用显式的 STATIC_DIR 配置，而非从 UPLOAD_DIR 解析
+static_dir = str(settings.BASE_DIR / "static")
 app.mount(settings.STATIC_PREFIX, StaticFiles(directory=static_dir), name="static")
 
 # ============================================================
@@ -166,8 +203,9 @@ async def health():
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        # ✅ 修复：不暴露内部错误详情
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "unhealthy", "error": str(e), "env": settings.ENV}
+            detail={"status": "unhealthy", "database": "error", "env": settings.ENV}
         )

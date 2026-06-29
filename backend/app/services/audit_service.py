@@ -35,17 +35,23 @@ async def _log_call(
     """
     if execution_time_ms is None:
         execution_time_ms = int((time.time() - start_time) * 1000)
-    
-    await crud.insert_audit_log(
-        user_id=user_id,
-        action_type=action_type,
-        model_name=model_name,
-        input_summary=input_summary,
-        raw_ai_response=raw_response,
-        execution_time_ms=execution_time_ms,
-        status="SUCCESS" if success else "FAILED",
-        error_message=error_msg if not success else None,
-    )
+
+    # ✅ 修复：审计日志失败不应中断主业务逻辑
+    import logging as _logging
+    _audit_logger = _logging.getLogger(__name__)
+    try:
+        await crud.insert_audit_log(
+            user_id=user_id,
+            action_type=action_type,
+            model_name=model_name,
+            input_summary=input_summary,
+            raw_ai_response=raw_response,
+            execution_time_ms=execution_time_ms,
+            status="SUCCESS" if success else "FAILED",
+            error_message=error_msg if not success else None,
+        )
+    except Exception:
+        _audit_logger.warning(f"审计日志写入失败: action={action_type}", exc_info=True)
 
 
 # ============================================================

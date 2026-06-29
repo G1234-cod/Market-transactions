@@ -78,17 +78,20 @@ async def generate(
                 "message": "文案生成完成"
             })
 
-            # 4. 记录成功审计日志（截断过长内容以保护隐私）
+            # 4. 记录成功审计日志（✅ 修复：失败不影响 SSE 流）
             full_response = "".join(full_text)
             logged_response = full_response[:2000] + ("...(truncated)" if len(full_response) > 2000 else "")
-            await audit_service.log_generate_call(
-                user_id=user_id,
-                model_name=settings.DEEPSEEK_MODEL,
-                input_summary=f"{payload.brand} {payload.model}",
-                raw_response=logged_response,
-                start_time=start_time,
-                success=True,
-            )
+            try:
+                await audit_service.log_generate_call(
+                    user_id=user_id,
+                    model_name=settings.DEEPSEEK_MODEL,
+                    input_summary=f"{payload.brand} {payload.model}",
+                    raw_response=logged_response,
+                    start_time=start_time,
+                    success=True,
+                )
+            except Exception as audit_err:
+                logger.warning(f"审计日志写入失败（不影响主流程）: {audit_err}")
 
         except Exception as e:
             logger.error(f"❌ 流式生成失败: {e}")
@@ -98,7 +101,7 @@ async def generate(
                 "type": "error",
                 "status": "error",
                 "code": "GENERATION_ERROR",
-                "message": str(e)
+                "message": "文案生成失败，请重试"  # ✅ 修复：不暴露内部错误详情
             })
 
             # 记录失败审计日志（截断过长内容）

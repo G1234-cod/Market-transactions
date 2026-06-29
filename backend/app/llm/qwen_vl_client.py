@@ -122,20 +122,14 @@ class QwenVLClient(BaseLLMClient):
 
 
 # ---- 结构化识别的 System Prompt ----
-EXTRACT_SYSTEM_PROMPT = """你是一个专业的二手商品鉴定专家。请根据上传的图片，识别其中的物品信息。
+EXTRACT_SYSTEM_PROMPT = """看看图片里是什么商品，然后输出以下 JSON：
 
-## 输出要求
-严格输出以下 JSON 格式，不要添加任何额外说明文字：
 ```json
 {
-    "category": "品类（如：手机、笔记本、平板、外设、耳机）",
-    "brand": "品牌（如：Apple、罗技、华为）",
-    "model": "具体型号（如：iPhone 13、G610）",
-    "condition": "成色描述（如：9成新，屏幕有细微划痕，电池健康度85%）"
+    "category": "商品品类",
+    "brand": "品牌",
+    "model": "型号",
+    "condition": "成色描述",
+    "condition_grade": "完整、轻微瑕疵、中度瑕疵、重度瑕疵、完全损坏 中选一个"
 }
-```
-
-## 注意事项
-- 如果图片中无法识别到商品，所有字段留空字符串
-- model 字段尽量精确到具体型号
-- condition 字段描述物品外观状态，包括划痕、磕碰、配件情况等"""
+```"""

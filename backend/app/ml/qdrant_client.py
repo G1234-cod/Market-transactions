@@ -10,6 +10,7 @@ Qdrant 向量数据库客户端（Docker HTTP 模式）
     results = qdrant.search(vector, top_k=5)
 """
 import logging
+import threading
 from typing import Optional, List, Dict, Any
 
 from qdrant_client import QdrantClient
@@ -93,10 +94,12 @@ class QdrantSearch:
         if vector.ndim == 1:
             vector = vector.reshape(1, -1)
         
-        # 检查向量维度
+        # ✅ 修复：维度不匹配时拒绝写入，避免 Qdrant 报错
         if vector.shape[1] != self.vector_size:
-            logger.warning(f"⚠️ 向量维度不匹配: {vector.shape[1]} != {self.vector_size}")
-        
+            raise ValueError(
+                f"向量维度不匹配: 期望 {self.vector_size}, 实际 {vector.shape[1]}"
+            )
+
         point = models.PointStruct(
             id=item_id,
             vector=vector[0].tolist(),
@@ -175,16 +178,18 @@ class QdrantSearch:
                 ]
             )
         
-        # 使用 query_points API
+        # 使用 query_points API（新版）
         try:
-            results = self.client.query_points(
+            response = self.client.query_points(
                 collection_name=self.collection_name,
                 query=vector.tolist(),
                 limit=top_k,
                 query_filter=query_filter,
                 score_threshold=score_threshold,
             )
-        except AttributeError:
+            # query_points 返回 QueryResponse，需要 .points
+            results = response.points if hasattr(response, 'points') else response
+        except (AttributeError, TypeError):
             # 降级到 search API（旧版本兼容）
             results = self.client.search(
                 collection_name=self.collection_name,
@@ -193,12 +198,12 @@ class QdrantSearch:
                 query_filter=query_filter,
                 score_threshold=score_threshold,
             )
-        
+
         return [
             {
-                "id": hit.id,
-                "score": hit.score,
-                "payload": hit.payload or {}
+                "id": hit.id if hasattr(hit, 'id') else hit[0],
+                "score": hit.score if hasattr(hit, 'score') else hit[1],
+                "payload": (hit.payload if hasattr(hit, 'payload') else {}) or {}
             }
             for hit in results
         ]
@@ -261,21 +266,31 @@ class QdrantSearch:
             ]
         )
         
-        # 先获取符合条件的点
-        points = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=query_filter,
-            limit=1000,
-            with_payload=False,
-        )
-        
-        point_ids = [p.id for p in points[0]]
-        if point_ids:
+        # ✅ 修复：循环 scroll 确保删除所有匹配项（不仅前1000条）
+        all_ids = []
+        offset = None
+        while True:
+            points, next_offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=query_filter,
+                limit=1000,
+                offset=offset,
+                with_payload=False,
+            )
+            batch_ids = [p.id for p in points]
+            if not batch_ids:
+                break
+            all_ids.extend(batch_ids)
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        if all_ids:
             self.client.delete(
                 collection_name=self.collection_name,
-                points_selector=point_ids
+                points_selector=all_ids
             )
-            logger.info(f"🗑️ 已删除 {len(point_ids)} 个商品")
+            logger.info(f"🗑️ 已删除 {len(all_ids)} 个商品")
     
     def count(self) -> int:
         """获取索引中的向量数量"""
@@ -326,18 +341,27 @@ class QdrantSearch:
 
 
 # ============================================================
-# 单例实例
+# 单例实例（线程安全）
 # ============================================================
 
 _qdrant: Optional[QdrantSearch] = None
+_qdrant_lock = threading.Lock()
 
 
 def get_qdrant() -> QdrantSearch:
-    """获取 Qdrant 客户端单例"""
+    """获取 Qdrant 客户端单例（线程安全）"""
     global _qdrant
-    if _qdrant is None:
+
+    # ✅ 快速路径（无锁）
+    if _qdrant is not None:
+        return _qdrant
+
+    # ✅ 慢速路径（有锁，双重检查）
+    with _qdrant_lock:
+        if _qdrant is not None:
+            return _qdrant
         _qdrant = QdrantSearch()
-    return _qdrant
+        return _qdrant
 
 
 def reset_qdrant():

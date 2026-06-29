@@ -28,24 +28,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["视觉识别"])
 
 # ============================================================
-# 全局单例
+# 全局单例（线程安全）
 # ============================================================
+import threading
 _yolo_detector = None
 _data_collector = None
+_yolo_lock = threading.Lock()
+_collector_lock = threading.Lock()
 
 
 def get_yolo_detector():
     global _yolo_detector
-    if _yolo_detector is None:
+    if _yolo_detector is not None:
+        return _yolo_detector
+    with _yolo_lock:
+        if _yolo_detector is not None:
+            return _yolo_detector
         _yolo_detector = YOLODetector()
-    return _yolo_detector
+        return _yolo_detector
 
 
 def get_data_collector():
     global _data_collector
-    if _data_collector is None:
+    if _data_collector is not None:
+        return _data_collector
+    with _collector_lock:
+        if _data_collector is not None:
+            return _data_collector
         _data_collector = DataCollector()
-    return _data_collector
+        return _data_collector
 
 
 # ============================================================
