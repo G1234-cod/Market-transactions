@@ -467,14 +467,14 @@ async def trigger_model_training(
                     if process.returncode != 0:
                         job['status'] = 'failed'
                         job['progress'] = 0
-                        err_msg = stderr.decode()[:500] if stderr else '未知错误'
+                        err_msg = stderr.decode("utf-8", errors="replace")[:500] if stderr else '未知错误'
                         job['logs'].append(f'[ERROR] {err_msg}')
                         logger.error(f"训练 {job_id} 失败: {err_msg}")
                     else:
                         job['status'] = 'completed'
                         job['progress'] = 100
                         job['completed_at'] = dt.datetime.now().isoformat()
-                        out_msg = stdout.decode()[:500] if stdout else '训练完成'
+                        out_msg = stdout.decode("utf-8", errors="replace")[:500] if stdout else '训练完成'
                         job['logs'].append(f'[OK] {out_msg}')
                         logger.info(f"训练 {job_id} 完成")
             except asyncio.TimeoutError:

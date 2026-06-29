@@ -37,7 +37,9 @@ def fail(msg):
 
 def run(cmd, timeout=120):
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout, cwd=SCRIPT_DIR)
+        r = subprocess.run(cmd, shell=True, capture_output=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=timeout, cwd=SCRIPT_DIR)
         return r.returncode, (r.stdout + r.stderr).strip()
     except subprocess.TimeoutExpired:
         return -1, "timeout"
