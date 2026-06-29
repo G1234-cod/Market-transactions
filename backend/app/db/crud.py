@@ -94,7 +94,7 @@ async def query_price(brand: str, model: str) -> dict | None:
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
-                "SELECT category, brand, model, avg_price, low_price, high_price "
+                "SELECT category, brand, model, avg_price, low_price, high_price, crawled_at "
                 "FROM market_prices WHERE brand=%s AND model=%s",
                 (brand, model),
             )
@@ -103,7 +103,7 @@ async def query_price(brand: str, model: str) -> dict | None:
                 return row
 
             await cur.execute(
-                "SELECT category, brand, model, avg_price, low_price, high_price "
+                "SELECT category, brand, model, avg_price, low_price, high_price, crawled_at "
                 "FROM market_prices WHERE brand=%s",
                 (brand,),
             )
@@ -116,6 +116,113 @@ async def query_price(brand: str, model: str) -> dict | None:
             if best and best_score > 0.7:
                 return best
             return None
+
+
+async def upsert_price(
+    brand: str, 
+    model: str, 
+    avg_price: float, 
+    low_price: float, 
+    high_price: float,
+    category: str = "",
+    data_source: str = ""
+) -> bool:
+    """
+    更新或插入价格数据（缓存）
+    
+    Args:
+        brand: 品牌
+        model: 型号
+        avg_price: 均价
+        low_price: 最低价
+        high_price: 最高价
+        category: 品类
+        data_source: 数据来源
+        
+    Returns:
+        bool: 是否成功
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO market_prices 
+                   (category, brand, model, avg_price, low_price, high_price, 
+                    price_unit, data_source, crawled_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                   ON DUPLICATE KEY UPDATE 
+                   avg_price = VALUES(avg_price),
+                   low_price = VALUES(low_price),
+                   high_price = VALUES(high_price),
+                   category = COALESCE(VALUES(category), category),
+                   data_source = VALUES(data_source),
+                   crawled_at = NOW()""",
+                (category, brand, model, avg_price, low_price, high_price, 
+                 'CNY', data_source)
+            )
+            await conn.commit()
+            return True
+
+
+async def insert_price_history(
+    brand: str,
+    model: str,
+    avg_price: float,
+    low_price: float,
+    high_price: float,
+    source: str = ""
+) -> int:
+    """
+    插入价格历史记录
+    
+    Args:
+        brand: 品牌
+        model: 型号
+        avg_price: 均价
+        low_price: 最低价
+        high_price: 最高价
+        source: 数据来源
+        
+    Returns:
+        int: 记录ID
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO price_history 
+                   (brand, model, price, low_price, high_price, price_type, source)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (brand, model, avg_price, low_price, high_price, 'avg', source)
+            )
+            await conn.commit()
+            return cur.lastrowid
+
+
+async def get_price_history(brand: str, model: str, limit: int = 50) -> list[dict]:
+    """
+    获取价格历史记录
+    
+    Args:
+        brand: 品牌
+        model: 型号
+        limit: 返回数量
+        
+    Returns:
+        list[dict]: 历史记录列表
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """SELECT price, low_price, high_price, source, recorded_at
+                   FROM price_history 
+                   WHERE brand = %s AND model = %s
+                   ORDER BY recorded_at DESC
+                   LIMIT %s""",
+                (brand, model, limit)
+            )
+            return await cur.fetchall()
 
 
 # ============================================================
