@@ -23,8 +23,25 @@ class ImagePreprocessor:
         self.target_size = target_size
     
     def resize(self, image: Image.Image) -> Image.Image:
-        """尺寸统一到 target_size × target_size"""
-        return image.resize((self.target_size, self.target_size), Image.Resampling.LANCZOS)
+        """
+        等比缩放 + 灰边填充（letterbox），保持宽高比。
+        
+        YOLO 模型对拉伸变形敏感，直接 resize 到正方形会导致细长物体（如手机竖拍图）
+        特征扭曲，无法识别。letterbox 保证物体形状不变，用灰边填充空白区域。
+        """
+        iw, ih = image.size
+        scale = self.target_size / max(iw, ih)
+        new_w, new_h = int(iw * scale), int(ih * scale)
+
+        resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        # 创建灰色画布，居中放置缩放后的图片
+        canvas = Image.new('RGB', (self.target_size, self.target_size), (114, 114, 114))
+        pad_x = (self.target_size - new_w) // 2
+        pad_y = (self.target_size - new_h) // 2
+        canvas.paste(resized, (pad_x, pad_y))
+
+        return canvas
     
     def select_main_object(self, image: Image.Image) -> tuple:
         """

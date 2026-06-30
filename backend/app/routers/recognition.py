@@ -421,23 +421,9 @@ async def recognize(
         logger.info(f"📋 [80类] [{result_id}]: {final_category} / {qwen_brand} / {qwen_model}")
     else:
         # ✅ 不是80类：视觉大模型独立判定，它是什么就是什么
+        # 不做任何错题记录——品类不在预设范围不是错误，只有模型判断冲突才是
         final_category = qwen_category
         logger.info(f"📋 [视觉大模型] [{result_id}]: {final_category} / {qwen_brand} / {qwen_model}")
-
-        # 存入错题集（本地+数据库）
-        try:
-            collector = get_data_collector()
-            collector.collect(
-                image=processed_image,
-                wrong_label=yolo_category if yolo_category != 'unknown' else 'unknown_preset',
-                correct_label=qwen_category,
-                user_id=user_id or 0,
-                item_id=None,
-                confidence=yolo_result.get('confidence', 0.0),
-                save_to_db=True,
-            )
-        except Exception as e:
-            logger.error(f"❌ 错题集存入失败: {e}")
 
     final_brand = qwen_brand
     final_model = qwen_model
