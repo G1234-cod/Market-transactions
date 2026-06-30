@@ -68,11 +68,16 @@ def main():
     if args.skip_qdrant:
         backend_cmd.append("--skip-qdrant")
 
+    import os as _os
+    env = _os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+
     backend_proc = subprocess.Popen(
         backend_cmd,
         cwd=str(BACKEND),
         stdout=sys.stdout,
         stderr=sys.stderr,
+        env=env,
     )
 
     # ============================================================
@@ -98,6 +103,7 @@ def main():
         cwd=str(FRONTEND),
         stdout=sys.stdout,
         stderr=sys.stderr,
+        env=env,
     )
 
     print(f"""
@@ -111,10 +117,20 @@ def main():
     """)
 
     try:
-        backend_proc.wait()
-        frontend_proc.wait()
+        # 轮询保活：任一进程退出则终止另一个
+        while True:
+            time.sleep(1)
+            if backend_proc.poll() is not None:
+                print("\n[错误] 后端意外退出，终止前端")
+                frontend_proc.terminate()
+                break
+            if frontend_proc.poll() is not None:
+                print("\n[错误] 前端意外退出，终止后端")
+                backend_proc.terminate()
+                break
     except KeyboardInterrupt:
         print("\n  正在停止...")
+    finally:
         backend_proc.terminate()
         frontend_proc.terminate()
         backend_proc.wait()

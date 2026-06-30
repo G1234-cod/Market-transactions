@@ -72,6 +72,32 @@ class PriceResult(BaseModel):
     note: str = ""
 
 
+class CrawledItem(BaseModel):
+    title: str = ""
+    price: float = 0
+    url: str = ""
+    image: str = ""
+
+
+class PriceHistoryItem(BaseModel):
+    price: float = 0
+    low_price: float = 0
+    high_price: float = 0
+    recorded_at: str = ""
+    source: str = ""
+
+
+class PriceDetailResult(BaseModel):
+    category: str = ""
+    brand: str = ""
+    model: str = ""
+    current_price: dict = {"avg": 0, "low": 0, "high": 0}
+    history_prices: List[PriceHistoryItem] = []
+    crawled_items: List[CrawledItem] = []
+    data_source: str = ""
+    note: str = ""
+
+
 # ============================================================
 # 文案生成
 # ============================================================

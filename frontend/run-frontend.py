@@ -4,23 +4,22 @@
 import subprocess
 import webbrowser
 import time
-import socket
+import urllib.request
 import argparse
 import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-HOST = "localhost"
-PORT = 5173
+URL = "http://localhost:5173"
 
 
-def is_ready(host, port, timeout=1.0):
-    """用 socket 检测端口是否在监听"""
+def is_http_ready(url, timeout=2.0):
+    """用 HTTP 请求检测是否就绪"""
     try:
-        sock = socket.create_connection((host, port), timeout=timeout)
-        sock.close()
-        return True
-    except (ConnectionRefusedError, OSError, socket.timeout):
+        req = urllib.request.Request(url)
+        resp = urllib.request.urlopen(req, timeout=timeout)
+        return resp.status == 200
+    except Exception:
         return False
 
 
@@ -30,9 +29,8 @@ def main():
     args = parser.parse_args()
 
     print(f"\n[前端] 启动 Vite 开发服务器...")
-    print(f"[前端] 地址: http://{HOST}:{PORT}")
+    print(f"[前端] 地址: {URL}")
 
-    # 启动 Vite
     proc = subprocess.Popen(
         "npm run dev",
         shell=True,
@@ -41,20 +39,23 @@ def main():
         stderr=sys.stderr,
     )
 
-    # 等待就绪
+    # 等待 Vite HTTP 就绪（最多 30 秒）
     print(f"[前端] 等待就绪", end="", flush=True)
     for _ in range(30):
-        if is_ready(HOST, PORT):
+        if is_http_ready(URL):
             print(" ✓")
             break
         time.sleep(1)
+        if proc.poll() is not None:
+            print(f"\n[前端] Vite 进程意外退出 (code={proc.returncode})")
+            return
         print(".", end="", flush=True)
     else:
-        print(f"\n[前端] 等不及了，直接打开浏览器...")
+        print(f"\n[前端] 超时，直接打开浏览器...")
 
     if not args.no_browser:
-        webbrowser.open(f"http://{HOST}:{PORT}")
-        print(f"[前端] 浏览器已打开: http://{HOST}:{PORT}")
+        webbrowser.open(URL)
+        print(f"[前端] 浏览器已打开: {URL}")
 
     try:
         proc.wait()
