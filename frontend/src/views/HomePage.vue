@@ -133,7 +133,7 @@ async function doExtract() {
         price_reasoning: resp.deepseek?.price_reasoning || '',
         selling_points: resp.deepseek?.selling_points || [],
         image_urls: resp.image_urls || [],
-        annotated_url: resp.defect_result?.annotated_url || '',
+        annotated_base64: resp.defect_result?.annotated_base64 || '',
         defect_count: resp.defect_result?.defect_count || 0,
         condition_grade: resp.defect_result?.condition_grade || null,
       }

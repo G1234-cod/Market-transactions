@@ -127,7 +127,7 @@
         <p class="text-[11px] text-text-muted">此价格将展示在商城中，AI 价格仅供你参考</p>
       </div>
 
-      <div v-if="extractResult.annotated_url" class="rounded-xl overflow-hidden border border-border">
+      <div v-if="extractResult.annotated_base64" class="rounded-xl overflow-hidden border border-border">
         <div class="bg-gradient-to-r from-danger-50 to-warning-50/50 px-4 py-3 border-b border-border">
           <div class="flex items-center justify-between">
             <span class="text-xs text-danger-700 font-medium flex items-center gap-1.5">
@@ -146,7 +146,7 @@
           </div>
         </div>
         <div class="p-4 flex justify-center bg-gray-50">
-          <img :src="extractResult.annotated_url" alt="瑕疵标注图" class="max-h-64 rounded-lg object-contain shadow-sm" />
+          <img :src="'data:image/png;base64,' + extractResult.annotated_base64" alt="瑕疵标注图" class="max-h-64 rounded-lg object-contain shadow-sm" />
         </div>
         <!-- ✅ 5级成色程度 —— 瑕疵底部独立一行 -->
         <div v-if="extractResult.condition_grade" class="px-4 py-3 border-t border-border flex items-center justify-between"
@@ -286,7 +286,7 @@ const local = reactive({
   price_reasoning: '',
   selling_points: [],
   image_urls: [],
-  annotated_url: '',
+  annotated_base64: '',
   defect_count: 0,
   condition_grade: null,
 })
@@ -302,7 +302,7 @@ watch(() => props.extractResult, (v) => {
     local.price_reasoning = v.price_reasoning || ''
     local.selling_points = v.selling_points || []
     local.image_urls = v.image_urls || []
-    local.annotated_url = v.annotated_url || ''
+    local.annotated_base64 = v.annotated_base64 || ''
     local.defect_count = v.defect_count || 0
     local.condition_grade = v.condition_grade || null
     // ✅ AI 定价始终来自后端（只读展示，不绑定到用户价格）

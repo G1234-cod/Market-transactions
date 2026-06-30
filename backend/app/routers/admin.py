@@ -28,7 +28,7 @@ from app.ml.yolo_detector import YOLODetector
 from app.ml.defect_detector_yolo import DefectDetector
 from app.utils.file_validator import validate_upload_file
 from app.utils.preprocess import get_preprocessor
-from app.utils.image_utils import pil_to_base64, save_image
+from app.utils.image_utils import pil_to_base64
 from app.constants.categories import (
     PRESET_CATEGORIES,
     is_preset_category,
@@ -248,10 +248,6 @@ async def test_model(
     annotated_url = None
     annotated_base64 = None
     if defect_result['success'] and defect_result.get('annotated'):
-        annotated_filename = f"test_{result_id}_annotated.png"
-        annotated_path = os.path.join(settings.UPLOAD_DIR, 'annotated', annotated_filename)
-        save_image(defect_result['annotated'], annotated_path)
-        annotated_url = f"{settings.STATIC_PREFIX}/uploads/annotated/{annotated_filename}"
         annotated_base64 = pil_to_base64(defect_result['annotated'])
 
     market_avg_price = 0.0

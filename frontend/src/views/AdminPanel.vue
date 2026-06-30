@@ -256,10 +256,10 @@
                 <div class="p-4">
                   <div class="flex flex-col md:flex-row gap-4">
                     <!-- 标注图 -->
-                    <div v-if="testResult.defect_result?.annotated_url" class="flex-shrink-0">
+                    <div v-if="testResult.defect_result?.annotated_base64" class="flex-shrink-0">
                       <p class="text-xs text-text-muted mb-2">瑕疵标注图：</p>
                       <img
-                        :src="testResult.defect_result.annotated_url"
+                        :src="'data:image/png;base64,' + testResult.defect_result.annotated_base64"
                         class="max-h-72 rounded-lg object-contain border border-border shadow-sm"
                         alt="瑕疵标注图"
                       />
