@@ -10,6 +10,20 @@ export default {
       // 颜色系统（Primary + Accent）
       // ============================================================
       colors: {
+        space: {
+          DEFAULT: '#FFFFFF',
+          light: '#FAFAFA',
+          card: '#FFFFFF',
+          lighter: '#F5F5F5',
+        },
+        text: {
+          primary: '#1F2937',
+          secondary: '#6B7280',
+          muted: '#9CA3AF',
+        },
+        border: {
+          DEFAULT: '#E5E7EB',
+        },
         // Primary 色系（主色 - 蓝色/靛蓝系）
         primary: {
           50: '#eef2ff',
