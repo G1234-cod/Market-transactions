@@ -22,7 +22,7 @@ class YOLODetector:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        conf_threshold: float = 0.5,
+        conf_threshold: float = 0.2,
         device: str = "auto"
     ):
         """
@@ -270,7 +270,7 @@ _detector_lock = threading.Lock()
 
 def get_yolo_detector(
     model_path: Optional[str] = None,
-    conf_threshold: float = 0.5
+    conf_threshold: float = 0.2
 ) -> YOLODetector:
     """
     获取 YOLO 检测器单例（线程安全）
@@ -305,7 +305,7 @@ def get_yolo_detector(
 
 def detect_objects(
     image: Image.Image,
-    conf_threshold: float = 0.5
+    conf_threshold: float = 0.2
 ) -> List[Dict[str, Any]]:
     """
     快捷检测函数
@@ -323,7 +323,7 @@ def detect_objects(
 
 def detect_objects_from_path(
     image_path: str,
-    conf_threshold: float = 0.5
+    conf_threshold: float = 0.2
 ) -> List[Dict[str, Any]]:
     """
     从文件路径快捷检测

@@ -421,6 +421,7 @@ async def recognize(
         logger.info(f"📋 [80类] [{result_id}]: {final_category} / {qwen_brand} / {qwen_model}")
     else:
         # ✅ 不是80类：视觉大模型独立判定，它是什么就是什么
+        # 不做任何错题记录——品类不在预设范围不是错误，只有模型判断冲突才是
         final_category = qwen_category
         logger.info(f"📋 [视觉大模型] [{result_id}]: {final_category} / {qwen_brand} / {qwen_model}")
 
