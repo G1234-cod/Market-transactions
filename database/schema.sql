@@ -259,3 +259,4 @@ CREATE TABLE `notifications` (
   KEY `idx_created_at` (`created_at`),
   CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ALTER TABLE market_prices ADD COLUMN crawled_at TIMESTAMP NULL;

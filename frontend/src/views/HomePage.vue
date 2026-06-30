@@ -1,30 +1,32 @@
 <template>
   <div class="space-y-8">
-    <div class="text-center space-y-4">
-      <div class="relative inline-block">
-        <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-xl -z-10"></div>
-        <h1 class="text-3xl sm:text-4xl font-bold gradient-text">发布二手商品</h1>
+    <div class="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
+      <div>
+        <div class="relative inline-block">
+          <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-xl -z-10"></div>
+          <h1 class="text-3xl sm:text-4xl font-bold gradient-text">发布二手商品</h1>
+        </div>
+        <p class="text-text-muted text-sm mt-2">上传物品照片，AI 自动识别商品信息并生成专业带货文案</p>
       </div>
-      <p class="text-text-muted text-sm sm:text-base max-w-md mx-auto">上传物品照片，AI 自动识别商品信息并生成专业带货文案</p>
-    </div>
-
-    <div class="flex flex-wrap justify-center items-center gap-2">
-      <template v-for="(s, i) in steps" :key="s.label">
-        <div class="flex flex-col items-center gap-2 cursor-pointer group" @click="step >= i && (step = i)">
-          <div class="relative">
-            <div class="step-indicator"
-              :class="step >= i ? 'step-indicator-active' : 'step-indicator-pending'">
-              <span v-if="step > i">✓</span><span v-else>{{ i + 1 }}</span>
+      <!-- 步骤指示器 -->
+      <div class="flex items-center gap-2">
+        <template v-for="(s, i) in steps" :key="s.label">
+          <div class="flex flex-col items-center gap-1.5 cursor-pointer group" @click="step >= i && (step = i)">
+            <div class="relative">
+              <div class="step-indicator"
+                :class="step >= i ? 'step-indicator-active' : 'step-indicator-pending'">
+                <span v-if="step > i">✓</span><span v-else>{{ i + 1 }}</span>
+              </div>
+              <div v-if="step >= i" class="absolute -inset-1 bg-gradient-to-r from-primary-400/50 to-accent-400/50 rounded-full blur-lg opacity-50 -z-10 animate-pulse-slow"></div>
             </div>
-            <div v-if="step >= i" class="absolute -inset-1 bg-gradient-to-r from-primary-400/50 to-accent-400/50 rounded-full blur-lg opacity-50 -z-10 animate-pulse-slow"></div>
+            <span class="text-xs font-medium transition-colors" :class="step >= i ? 'text-primary-600' : 'text-text-muted group-hover:text-primary-500'">{{ s.label }}</span>
           </div>
-          <span class="text-xs font-medium transition-colors" :class="step >= i ? 'text-primary-600' : 'text-text-muted group-hover:text-primary-500'">{{ s.label }}</span>
-        </div>
-        <div v-if="i < steps.length - 1" class="w-10 sm:w-20 h-1 mx-1 rounded-full transition-all duration-500 relative overflow-hidden"
-          :class="step > i ? 'bg-primary-200' : 'bg-border-light'">
-          <div v-if="step > i" class="absolute inset-y-0 left-0 gradient-primary rounded-full transition-all duration-500" style="width: 100%"></div>
-        </div>
-      </template>
+          <div v-if="i < steps.length - 1" class="w-10 sm:w-16 h-1 mx-1 rounded-full transition-all duration-500 relative overflow-hidden"
+            :class="step > i ? 'bg-primary-200' : 'bg-border-light'">
+            <div v-if="step > i" class="absolute inset-y-0 left-0 gradient-primary rounded-full transition-all duration-500" style="width: 100%"></div>
+          </div>
+        </template>
+      </div>
     </div>
 
     <div class="glass-card overflow-hidden">
@@ -34,32 +36,34 @@
           <h2 class="font-semibold text-text-primary">{{ stepTitles[step] }}</h2>
         </div>
       </div>
-      
-      <div class="p-6">
+
+      <div class="p-6 sm:p-8 lg:p-10">
         <transition name="step" mode="out-in">
-          <div v-if="step === 0" key="upload" class="space-y-5">
-            <ImageUploader v-model="imageFile" />
-            <button 
-              class="btn-primary w-full"
-              :disabled="!imageFile || extracting" 
-              @click="doExtract"
-            >
-              <span v-if="extracting" class="loading-spinner mr-2" />
-              <span>{{ extracting ? 'AI 视觉识别中…' : '🚀 开始识别' }}</span>
-            </button>
+          <div v-if="step === 0" key="upload" class="space-y-6">
+            <div class="max-w-2xl mx-auto">
+              <ImageUploader v-model="imageFile" />
+              <button
+                class="btn-primary w-full mt-6"
+                :disabled="!imageFile || extracting"
+                @click="doExtract"
+              >
+                <span v-if="extracting" class="loading-spinner mr-2" />
+                <span>{{ extracting ? 'AI 视觉识别中…' : '🚀 开始识别' }}</span>
+              </button>
+            </div>
           </div>
 
-          <div v-else-if="step === 1" key="confirm" class="space-y-4">
+          <div v-else-if="step === 1" key="confirm">
             <ConfirmCard :extractResult="extractResult" :priceInfo="priceInfo" :loading="queryingPrice"
               @confirm="doGenerate" @saveDraft="doSaveDraft" />
-            <button class="btn-outline w-full flex items-center justify-center gap-2" @click="step = 0">
+            <button class="btn-outline w-full flex items-center justify-center gap-2 mt-4" @click="step = 0">
               <span>←</span> 返回重新上传
             </button>
           </div>
 
-          <div v-else-if="step === 2" key="generate" class="space-y-4">
-            <TypewriterText :text="generatedText" :active="generating" :done="generateDone" @save="doSave" />
-            <button class="btn-outline w-full flex items-center justify-center gap-2" @click="resetAll">
+          <div v-else-if="step === 2" key="generate">
+            <TypewriterText :text="generatedText" :active="generating" :done="generateDone" />
+            <button class="btn-outline w-full flex items-center justify-center gap-2 mt-4" @click="resetAll">
               发布另一件商品 <span>→</span>
             </button>
           </div>
@@ -276,6 +280,8 @@ async function doGenerate(form) {
           toast('文案生成完毕！', 'success')
           if (_sseTimeout) { clearTimeout(_sseTimeout); _sseTimeout = null }
           _streamControl = null
+          // 自动保存到发布历史
+          await doSave()
           break
 
         case 'error':
@@ -295,6 +301,8 @@ async function doGenerate(form) {
             toast('文案生成完毕！', 'success')
             if (_sseTimeout) { clearTimeout(_sseTimeout); _sseTimeout = null }
             _streamControl = null
+            // 自动保存到发布历史
+            await doSave()
           }
           if (data.error) {
             generating.value = false

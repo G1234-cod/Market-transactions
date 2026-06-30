@@ -1,5 +1,14 @@
 <template>
   <div class="space-y-6">
+    <!-- 返回按钮 -->
+    <button
+      @click="$router.back()"
+      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:text-primary-600 hover:bg-primary-50 border border-border hover:border-primary-200 transition-all"
+      aria-label="返回上一页"
+    >
+      <span class="text-lg">←</span> 返回
+    </button>
+
     <!-- 页面标题 -->
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div>

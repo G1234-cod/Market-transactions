@@ -158,6 +158,12 @@ app.include_router(notifications.router, prefix="/api/v1")
 
 # 确保上传目录存在
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+# 挂载错误案例图片目录（必须在 /static 之前注册，否则会被 /static 拦截）
+error_data_dir = str(settings.BASE_DIR / "data" / "error_data")
+if os.path.exists(error_data_dir):
+    app.mount(f"{settings.STATIC_PREFIX}/error_data", StaticFiles(directory=error_data_dir), name="error-data")
+
 # ✅ 修复：使用显式的 STATIC_DIR 配置，而非从 UPLOAD_DIR 解析
 static_dir = str(settings.BASE_DIR / "static")
 app.mount(settings.STATIC_PREFIX, StaticFiles(directory=static_dir), name="static")

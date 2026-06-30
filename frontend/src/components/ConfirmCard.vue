@@ -242,7 +242,7 @@
           @click="$emit('confirm', local)"
         >
           <span v-if="loading" class="loading-spinner" />
-          {{ loading ? '查询行情中…' : '✨ 确认并生成文案' }}
+          {{ loading ? '查询行情中…' : '✨ 确认生成文案并发布' }}
         </button>
 
         <button
