@@ -4,7 +4,7 @@ import io
 import time
 import json
 from typing import Optional
-from fastapi import APIRouter, Query, Depends, HTTPException, status
+from fastapi import APIRouter, Query, Depends, HTTPException, status, Request
 from PIL import Image
 import httpx
 
@@ -20,30 +20,49 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["发布历史"])
 
 
-def build_image_url(image_url: str) -> str:
+def build_image_url(image_url: str, request: Optional[Request] = None) -> str:
     """
     构建完整的图片 URL（统一处理函数）
-    
+    - 生产环境通过 Cloudflare Tunnel 自动获取正确域名
+    - 自动剥离旧数据中硬编码的 http://localhost 前缀
+
     Args:
         image_url: 原始图片路径（相对路径或完整URL）
-    
+        request: FastAPI Request 对象（可选，用于获取正确的域名）
+
     Returns:
         str: 完整图片URL
     """
     if not image_url:
         return ""
-    
+
+    # ✅ 生产环境（非本地访问）：剥离旧数据中硬编码的 localhost 前缀
+    if image_url.startswith("http://localhost"):
+        from urllib.parse import urlparse
+        is_local = True
+        if request:
+            host = request.headers.get("X-Forwarded-Host") or request.url.hostname or ""
+            is_local = host in ("localhost", "127.0.0.1") or host.startswith("localhost:")
+        if not is_local:
+            image_url = image_url[len("http://localhost"):]
+            # 去掉可能残留的端口号 :8000
+            if image_url.startswith(":8000"):
+                image_url = image_url[5:]
+
     if image_url.startswith("http://") or image_url.startswith("https://"):
         return image_url
-    
+
+    base = get_base_url(request) if request else get_base_url()
+
     if image_url.startswith(f"{settings.STATIC_PREFIX}/"):
-        return f"{get_base_url()}{image_url}"
-    
-    return get_static_url(image_url)
+        return f"{base}{image_url}"
+
+    return get_static_url(image_url, request)
 
 
 @router.get("/history")
 async def get_history(
+    request: Request,
     user_id: Optional[int] = Depends(get_current_user_optional),  # ✅ 可选认证
 ):
     """查询当前用户的发布记录列表"""
@@ -52,7 +71,7 @@ async def get_history(
     rows = await crud.get_history(user_id)
     items = []
     for r in rows:
-        img_url = build_image_url(r.get("original_image_url", ""))
+        img_url = build_image_url(r.get("original_image_url", ""), request)
         
         items.append(HistoryItem(
             id=r["id"],

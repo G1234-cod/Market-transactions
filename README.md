@@ -92,9 +92,9 @@
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | **后端框架** | Python 3.11 · FastAPI · Uvicorn | 异步 Web 框架，原生 async/await |
-| **数据库** | MySQL 8.0 · aiomysql | 异步连接池，7 张表，参数化查询 |
+| **数据库** | MySQL 8.0 · aiomysql | 异步连接池，11 张表，参数化查询 |
 | **向量搜索** | Qdrant · CLIP ViT-B-32 | 512 维语义向量，COSINE 相似度 |
-| **前端** | Vue 3 · Vite · Tailwind CSS · Axios | Composition API，ESM 原生热更新 |
+| **前端** | Vue 3 · Vite 6.0+ · Tailwind CSS · Axios · Chart.js | Composition API，ESM 原生热更新 |
 | **AI 大模型** | DeepSeek · Qwen-VL-Max | 文案生成+定价+视觉识别 |
 | **目标检测** | YOLOv8 (ultralytics) | 分类 + 实例分割（Kaputt 7 类缺陷） |
 | **特征提取** | CLIP (open_clip) · ViT-B-32 | 图文统一语义向量空间 |
@@ -194,7 +194,7 @@ python torchzidong.py
 mysql -u root -p < database\schema.sql
 ```
 
-输入 MySQL 密码后自动建库建表（7 张表 + 16 条种子行情数据）。
+输入 MySQL 密码后自动建库建表（11 张表 + 16 条种子行情数据）。
 
 验证：
 
@@ -202,7 +202,7 @@ mysql -u root -p < database\schema.sql
 mysql -u root -p -e "USE market_transactions; SHOW TABLES;"
 ```
 
-应看到 7 张表：`users`, `market_prices`, `published_items`, `ai_audit_logs`, `hard_cases`, `feature_vectors`, `price_history`
+应看到 11 张表：`users`, `market_prices`, `published_items`, `ai_audit_logs`, `hard_cases`, `feature_vectors`, `price_history`, `category_brands`, `model_disagreements`, `model_metrics`, `notifications`
 
 ---
 
@@ -320,12 +320,12 @@ Market-transactions/
 ├── yolov8m.pt                        # YOLOv8m 预训练权重 (50MB)
 │
 ├── database/
-│   └── schema.sql                    # 7 张表完整建表 + 种子数据
+│   └── schema.sql                    # 11 张表完整建表 + 种子数据
 │
 ├── frontend/                         # ── Vue 3 前端 ──
 │   ├── run-frontend.py               # 一键启动前端
 │   ├── index.html
-│   ├── package.json                  # 依赖: vue/vue-router/axios/vite/tailwind
+│   ├── package.json                  # 依赖: vue/vue-router/axios/vite/tailwind/chart.js/vue-chartjs
 │   ├── vite.config.js                # Vite 配置 + API 代理
 │   ├── tailwind.config.js
 │   ├── postcss.config.js
@@ -347,7 +347,11 @@ Market-transactions/
 │           ├── LoginPage.vue         # 登录页
 │           ├── RegisterPage.vue      # 注册页
 │           ├── MarketPage.vue        # 商城页（搜索+筛选+列表）
-│           └── HistoryPage.vue       # 发布历史页
+│           ├── HistoryPage.vue       # 发布历史页
+│           ├── SearchPage.vue          # 以图搜图页
+│           ├── NotificationPage.vue    # 通知页
+│           ├── PriceHistoryPage.vue    # 价格历史页
+│           └── AdminPanel.vue          # 管理员面板
 │
 ├── backend/                          # ── FastAPI 后端 ──
 │   ├── run-backend.py                # 一键启动后端
@@ -364,7 +368,7 @@ Market-transactions/
 │   │   ├── config.py                 # ★ 全局配置管理 (Settings 单例)
 │   │   ├── dependencies.py           # JWT 认证依赖 (get_current_user)
 │   │   │
-│   │   ├── routers/                  # ── 9 个路由模块 ──
+│   │   ├── routers/                  # ── 13 个路由模块 ──
 │   │   │   ├── auth.py               # POST /register, /login
 │   │   │   ├── extract.py            # POST /extract (Qwen-VL 识别+双模型比对)
 │   │   │   ├── detect.py             # POST /yolo/detect (YOLO 检测)
@@ -373,15 +377,21 @@ Market-transactions/
 │   │   │   ├── price.py              # GET /price (行情查询)
 │   │   │   ├── history.py            # GET /history, POST /save, /delist, /publish
 │   │   │   ├── market.py             # GET /market (商城列表)
-│   │   │   └── search.py             # POST /search/image, /text, /index (以图搜图)
+│   │   │   ├── search.py             # POST /search/image, /text, /index (以图搜图)
+│   │   │   ├── recognition.py          # POST /recognize (双模型协同识别)
+│   │   │   ├── price_history.py        # GET /price-history (价格历史)
+│   │   │   ├── notifications.py        # GET/POST /notifications (通知)
+│   │   │   └── admin.py                # 管理员路由 (审核/训练)
 │   │   │
-│   │   ├── services/                 # ── 6 个业务服务 ──
+│   │   ├── services/                 # ── 8 个业务服务 ──
 │   │   │   ├── audit_service.py      # LLM 审计日志
 │   │   │   ├── text_service.py       # DeepSeek 文案生成
 │   │   │   ├── price_service.py      # 三层查价匹配
 │   │   │   ├── vision_service.py     # Qwen-VL 响应解析
 │   │   │   ├── damage_detector.py    # YOLO-Seg 损伤分割
-│   │   │   └── image_processor.py    # 图片预处理 (1024px)
+│   │   │   ├── image_processor.py    # 图片预处理 (1024px)
+│   │   │   ├── crawler_service.py      # 爬虫编排
+│   │   │   └── history_estimator.py    # AI价格历史估算
 │   │   │
 │   │   ├── db/                       # ── 数据库层 ──
 │   │   │   ├── connection.py         # aiomysql 异步连接池
@@ -463,15 +473,16 @@ Market-transactions/
 │   ├── torchzidong.py                # PyTorch 自动安装脚本
 │   ├── verify_dependencies.py        # 依赖验证
 │
-└── 项目文档/                          # 7 份文档 + 图片
+└── 项目文档/                          # 9 份文档 + 图片
     ├── 前端设计接口.md               # API 端点详细定义
     ├── 项目结构说明书.md             # 完整目录树 + 模块说明
-    ├── 数据库结构说明书.md           # 7 张表 ER 设计 + CRUD
+    ├── 数据库结构说明书.md           # 11 张表 ER 设计 + CRUD
     ├── 核心技术.md
-    ├── 所有技术清单.md               # 全栈技术清单
     ├── 模型.md                       # ML 模型说明
     ├── 操作手册.md                   # 使用操作指南
     ├── 未完成功能.md                 # 待补充功能 + 优先级
+    ├── 测试文档.md                   # 测试用例与覆盖说明
+    ├── 文档索引.md                   # 全部文档导航索引
     ├── 版本迭代记录.md               # v0.1～v0.16 完整迭代
     └── 版本迭代记录.assets/          # 文档截图
 ```
@@ -493,8 +504,8 @@ Market-transactions/
 
 | 文档 | 内容 |
 |------|------|
-| [前端设计接口](项目文档/前端设计接口.md) | 17 个 API 端点详细定义（请求/响应/错误码） |
-| [数据库结构说明书](项目文档/数据库结构说明书.md) | 7 张表完整设计 |
+| [前端设计接口](项目文档/前端设计接口.md) | 全部 API 端点详细定义（请求/响应/错误码） |
+| [数据库结构说明书](项目文档/数据库结构说明书.md) | 11 张表完整设计 |
 | [核心技术与设计理念](项目文档/核心技术.md) | 10 项技术的原理+实现讲解 |
 | [操作手册](项目文档/操作手册.md) | 详细操作步骤 |
 | [版本迭代记录](项目文档/版本迭代记录.md) | v0.1～v0.16 开发历史 |
