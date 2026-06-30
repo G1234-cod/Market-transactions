@@ -14,6 +14,13 @@ class LoginRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
+    """公开注册请求 —— 不暴露 role 字段，注册强制为普通用户"""
+    username: str
+    password: str
+
+
+class AdminCreateUserRequest(BaseModel):
+    """管理员创建用户请求 —— 允许指定角色"""
     username: str
     password: str
     role: str = "user"  # "user" 或 "admin"

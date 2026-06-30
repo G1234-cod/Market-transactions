@@ -22,23 +22,28 @@ const routes = [
   { path: '/market',        component: MarketPage,    meta: { public: true } },
   { path: '/price-history', component: PriceHistoryPage, meta: { public: true } },
   { path: '/search',        component: SearchPage,     meta: { public: true } },
-  { path: '/admin',         component: AdminPanel,    meta: { auth: true } },
+  { path: '/admin',         component: AdminPanel,    meta: { auth: true, role: 'admin' } },
   { path: '/notifications', component: NotificationPage, meta: { auth: true } },
   { path: '/',              redirect: '/login' },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-const { isLoggedIn, logout } = useUser()
+const { isLoggedIn, logout, role } = useUser()
 
 // ✅ 进入系统先清除旧会话，强制到登录页
 logout()
 
 router.beforeEach((to, from) => {
-  console.log(`[Router] ${from.path} → ${to.path} | auth=${!!to.meta.auth} | loggedIn=${isLoggedIn.value}`)
+  console.log(`[Router] ${from.path} → ${to.path} | auth=${!!to.meta.auth} | loggedIn=${isLoggedIn.value} | role=${role.value}`)
   if (to.meta.auth && !isLoggedIn.value) {
     console.warn(`[Router] 🚫 未登录，拦截导航到 ${to.path}，重定向 /login`)
     return '/login'
+  }
+  // ✅ 管理员路由额外校验角色，防止非管理员用户直接访问 /admin
+  if (to.meta.role === 'admin' && role.value !== 'admin') {
+    console.warn(`[Router] 🚫 非管理员用户尝试访问 ${to.path}，重定向 /home`)
+    return '/home'
   }
 })
 

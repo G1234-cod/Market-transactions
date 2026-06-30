@@ -195,6 +195,9 @@ async function doRegister() {
     // 注册成功
     if (data.success || data.user_id) {
       successMsg.value = '注册成功！即将跳转至登录页面…'
+      // ✅ 清除所有旧的登录状态，防止残留 admin session 混入新注册用户
+      localStorage.removeItem('token')
+      localStorage.removeItem('user_info')
       // 1.5 秒后跳转到登录页
       setTimeout(() => {
         router.push('/login')

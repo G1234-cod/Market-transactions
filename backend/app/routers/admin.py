@@ -18,7 +18,7 @@ import io
 
 from app.config import settings
 from app.dependencies import get_current_admin
-from app.models.schemas import RegisterRequest
+from app.models.schemas import AdminCreateUserRequest
 from app.db import crud
 from app.db.connection import get_pool
 from app.services import vision_service, audit_service
@@ -1056,7 +1056,7 @@ async def get_users(
 # ============================================================
 @router.post("/admin/users")
 async def create_user(
-    payload: RegisterRequest,
+    payload: AdminCreateUserRequest,
     admin_id: int = Depends(get_current_admin),
 ):
     """管理员创建用户"""

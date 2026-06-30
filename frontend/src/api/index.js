@@ -31,8 +31,8 @@ export async function login(username, password) {
   return data
 }
 
-export async function register(username, password, role = 'user') {
-  const { data } = await api.post('/register', { username, password, role })
+export async function register(username, password) {
+  const { data } = await api.post('/register', { username, password })
   return data
 }
 
