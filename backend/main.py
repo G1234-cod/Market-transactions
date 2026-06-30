@@ -1,5 +1,9 @@
 """FastAPI 应用入口"""
 import os
+
+# ✅ 国内网络环境：使用 HuggingFace 镜像下载模型
+os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+
 import logging
 from contextlib import asynccontextmanager
 
@@ -94,14 +98,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Cache-Control"] = "no-store"
+        # ✅ 生产环境 CSP：允许 Google Fonts + Cloudflare 的脚本和样式
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob:; "
-            "connect-src 'self'; "
-            "font-src 'self'; "
-            "object-src 'none'; "
+            "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob: https:; "
+            "connect-src 'self' https:; "
             "base-uri 'self'; "
             "form-action 'self'"
         )
@@ -209,3 +213,38 @@ async def health():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "unhealthy", "database": "error", "env": settings.ENV}
         )
+
+
+# ============================================================
+# SPA 回退路由：前端 Vue Router 的 history 模式需要
+# 所有非 API / 非静态文件 / 非健康检查 的 GET 请求都返回 index.html
+# ============================================================
+
+from fastapi.responses import HTMLResponse
+
+SPA_ROUTES = {
+    "/market", "/market/",
+    "/history", "/history/",
+    "/login", "/login/",
+    "/register", "/register/",
+    "/search", "/search/",
+    "/home", "/home/",
+    "/admin", "/admin/",
+    "/notifications", "/notifications/",
+    "/price-history", "/price-history/",
+}
+
+SPA_INDEX_PATH = os.path.join(frontend_dist_dir, "index.html") if os.path.exists(frontend_dist_dir) else None
+
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def spa_fallback(full_path: str, request: Request):
+    """SPA 回退：将前端路由请求返回 index.html"""
+    # API / 静态文件 / 文档 等路径不拦截
+    if full_path.startswith("api/") or full_path.startswith("static/") or full_path == "health" or full_path.startswith("docs") or full_path == "openapi.json":
+        raise HTTPException(status_code=404)
+
+    if SPA_INDEX_PATH:
+        with open(SPA_INDEX_PATH, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read(), media_type="text/html")
+    raise HTTPException(status_code=404)

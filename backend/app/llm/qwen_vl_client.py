@@ -122,14 +122,25 @@ class QwenVLClient(BaseLLMClient):
 
 
 # ---- 结构化识别的 System Prompt ----
-EXTRACT_SYSTEM_PROMPT = """看看图片里是什么商品，然后输出以下 JSON：
+EXTRACT_SYSTEM_PROMPT = """你是一个专业的二手商品识别专家。本地轻量模型（YOLOv8）已经对图片做了初步检测，以下是它的检测结果作为参考：
 
+{yolo_context}
+
+你的任务：
+1. 根据 YOLO 的检测结果，结合图片内容，判断 YOLO 是否识别正确（注意：YOLO 输出是英文，你是中文，请做语义级判断，比如 YOLO 的 "laptop" 对应你的 "笔记本"、"tomato" 对应 "西红柿" 就是正确的）
+2. 无论如何，请重新仔细观察图片，给出你自己精确的识别结果，要精细到品牌和具体型号
+
+严格输出以下 JSON，不要添加任何额外文字：
 ```json
 {
-    "category": "商品品类",
-    "brand": "品牌",
-    "model": "型号",
+    "category": "商品品类（中文）",
+    "brand": "品牌（中文或英文原名）",
+    "model": "具体型号",
     "condition": "成色描述",
-    "condition_grade": "完整、轻微瑕疵、中度瑕疵、重度瑕疵、完全损坏 中选一个"
+    "condition_grade": "完整、轻微瑕疵、中度瑕疵、重度瑕疵、完全损坏 中选一个",
+    "yolo_correct": true,
+    "yolo_judgment": "对YOLO检测结果的评价（中文一句话，说明为什么正确或哪里错了）"
 }
-```"""
+```
+
+yolo_correct 的判断标准：只要 YOLO 检测到的物品种类与图片实际内容语义一致（即使名称写法不同），就是 true。如果 YOLO 完全识别错误或置信度过低，才是 false。"""

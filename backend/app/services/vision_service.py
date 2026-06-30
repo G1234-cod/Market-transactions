@@ -39,4 +39,6 @@ def parse_to_extract_result(raw_response: str) -> ExtractResult:
         model=data.get("model", ""),
         condition=data.get("condition", ""),
         condition_grade=data.get("condition_grade", ""),
+        yolo_correct=data.get("yolo_correct"),
+        yolo_judgment=data.get("yolo_judgment", ""),
     )

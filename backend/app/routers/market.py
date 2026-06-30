@@ -1,6 +1,6 @@
 """GET /api/v1/market — 商城商品列表（全用户已发布商品）"""
 import math
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from typing import Optional
 
 from app.models.schemas import MarketItem, MarketListResponse
@@ -16,6 +16,7 @@ router = APIRouter(tags=["商城"])
     summary="商城商品列表（分页+排序+多维筛选）",
 )
 async def get_market(
+    request: Request,
     keyword: str = Query(default="", description="搜索关键词（匹配标题和描述）"),
     category: str = Query(default="", description="品类筛选：手机/笔记本/平板/外设/耳机/手表"),
     condition: str = Query(default="", description="成色筛选（模糊匹配，如 95新）"),
@@ -54,11 +55,21 @@ async def get_market(
     for r in rows:
         # 处理图片 URL
         img_url = r.get("original_image_url", "")
+        # ✅ 生产环境（非本地访问）：剥离旧数据中硬编码的 localhost 前缀
+        if img_url.startswith("http://localhost"):
+            from urllib.parse import urlparse
+            host = request.headers.get("X-Forwarded-Host") or request.url.hostname or ""
+            is_local = host in ("localhost", "127.0.0.1") or host.startswith("localhost:")
+            if not is_local:
+                img_url = img_url[len("http://localhost"):]
+                if img_url.startswith(":8000"):
+                    img_url = img_url[5:]
         if img_url and not img_url.startswith("http"):
+            base = get_base_url(request) if request else get_base_url()
             if img_url.startswith(f"{settings.STATIC_PREFIX}/"):
-                img_url = f"{get_base_url()}{img_url}"
+                img_url = f"{base}{img_url}"
             else:
-                img_url = get_static_url(img_url)
+                img_url = get_static_url(img_url, request)
 
         items.append(MarketItem(
             id=r["id"],

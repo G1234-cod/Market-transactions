@@ -2,7 +2,7 @@
 以图搜图 + 以文搜图 API
 """
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request, status
 from PIL import Image
 import io
 import json
@@ -28,15 +28,28 @@ MAX_TOP_K = 100
 DEFAULT_TOP_K = 10
 
 
-def build_image_url(image_url: str) -> str:
-    """构建完整的图片 URL"""
+def build_image_url(image_url: str, request: Optional[Request] = None) -> str:
+    """构建完整的图片 URL（生产环境自动适配 Cloudflare Tunnel 域名）"""
     if not image_url:
         return ""
+    
+    # ✅ 生产环境（非本地访问）：剥离旧数据中硬编码的 localhost 前缀
+    if image_url.startswith("http://localhost"):
+        is_local = True
+        if request:
+            host = request.headers.get("X-Forwarded-Host") or request.url.hostname or ""
+            is_local = host in ("localhost", "127.0.0.1") or host.startswith("localhost:")
+        if not is_local:
+            image_url = image_url[len("http://localhost"):]
+            if image_url.startswith(":8000"):
+                image_url = image_url[5:]
+
     if image_url.startswith("http://") or image_url.startswith("https://"):
         return image_url
     if image_url.startswith(f"{settings.STATIC_PREFIX}/"):
-        return f"{get_base_url()}{image_url}"
-    return get_static_url(image_url)
+        base = get_base_url(request) if request else get_base_url()
+        return f"{base}{image_url}"
+    return get_static_url(image_url, request)
 
 
 # ✅ SSRF 防护：验证 URL 是否安全
@@ -73,8 +86,9 @@ def _is_safe_url(url: str) -> bool:
 
 @router.post("/search/image")
 async def search_by_image(
+    request: Request,
     image: UploadFile = File(...),
-    top_k: int = Form(10, ge=1, le=MAX_TOP_K),  # ✅ 添加范围验证
+    top_k: int = Form(10, ge=1, le=MAX_TOP_K),
     filter_category: str = Form(default=""),
     user_id: int = Depends(get_current_user_optional),
 ):
@@ -123,7 +137,7 @@ async def search_by_image(
             item = items_map.get(item_id)
 
             if item and item.get('status') == 'published':
-                img_url = build_image_url(item.get("original_image_url", ""))
+                img_url = build_image_url(item.get("original_image_url", ""), request)
                 items.append({
                     'id': item['id'],
                     'title': item.get('ai_generated_title', '未命名商品'),
@@ -146,8 +160,9 @@ async def search_by_image(
 
 @router.post("/search/text")
 async def search_by_text(
+    request: Request,
     text: str = Form(..., description="商品描述文本"),
-    top_k: int = Form(10, ge=1, le=MAX_TOP_K),  # ✅ 添加范围验证
+    top_k: int = Form(10, ge=1, le=MAX_TOP_K),
     category: Optional[str] = Form(None, description="筛选品类（可选）"),
     user_id: int = Depends(get_current_user_optional),
 ):
@@ -181,7 +196,7 @@ async def search_by_text(
             item = items_map.get(item_id)
 
             if item and item.get('status') == 'published':
-                img_url = build_image_url(item.get("original_image_url", ""))
+                img_url = build_image_url(item.get("original_image_url", ""), request)
                 items.append({
                     'id': item['id'],
                     'title': item.get('ai_generated_title', '未命名商品'),
@@ -204,6 +219,7 @@ async def search_by_text(
 
 @router.post("/search/index")
 async def add_to_index(
+    request: Request,
     item_id: int = Form(...),
     image_url: str = Form(...),
     title: str = Form(""),
@@ -212,7 +228,7 @@ async def add_to_index(
 ):
     """商品上架时加入索引"""
     try:
-        full_url = build_image_url(image_url)
+        full_url = build_image_url(image_url, request)
         if not full_url:
             raise HTTPException(status_code=400, detail="无效的图片URL")
 
@@ -276,6 +292,7 @@ async def search_stats():
 
 @router.post("/search/by-filter")
 async def search_by_filter(
+    request: Request,
     category: Optional[str] = Form(None, description="品类筛选"),
     brand: Optional[str] = Form(None, description="品牌筛选"),
     model: Optional[str] = Form(None, description="型号关键词"),
@@ -300,7 +317,7 @@ async def search_by_filter(
         # 构建返回结果
         results = []
         for item in items:
-            img_url = build_image_url(item.get("original_image_url", ""))
+            img_url = build_image_url(item.get("original_image_url", ""), request)
             results.append({
                 'id': item['id'],
                 'title': item.get('ai_generated_title', '未命名商品'),

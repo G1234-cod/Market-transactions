@@ -111,7 +111,7 @@ async def query_price(brand: str, model: str) -> dict | None:
     async with pool.acquire() as conn:
         async with conn.cursor(aiomysql.DictCursor) as cur:
             await cur.execute(
-                "SELECT category, brand, model, avg_price, low_price, high_price, crawled_at "
+                "SELECT category, brand, model, avg_price, low_price, high_price, updated_at "
                 "FROM market_prices WHERE brand=%s AND model=%s",
                 (brand, model),
             )
@@ -120,7 +120,7 @@ async def query_price(brand: str, model: str) -> dict | None:
                 return row
 
             await cur.execute(
-                "SELECT category, brand, model, avg_price, low_price, high_price, crawled_at "
+                "SELECT category, brand, model, avg_price, low_price, high_price, updated_at "
                 "FROM market_prices WHERE brand=%s",
                 (brand,),
             )
@@ -164,18 +164,16 @@ async def upsert_price(
         async with conn.cursor() as cur:
             await cur.execute(
                 """INSERT INTO market_prices 
-                   (category, brand, model, avg_price, low_price, high_price, 
-                    price_unit, data_source, crawled_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                   (category, brand, model, avg_price, low_price, high_price, data_source, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                    ON DUPLICATE KEY UPDATE 
                    avg_price = VALUES(avg_price),
                    low_price = VALUES(low_price),
                    high_price = VALUES(high_price),
                    category = COALESCE(VALUES(category), category),
                    data_source = VALUES(data_source),
-                   crawled_at = NOW()""",
-                (category, brand, model, avg_price, low_price, high_price, 
-                 'CNY', data_source)
+                   updated_at = NOW()""",
+                (category, brand, model, avg_price, low_price, high_price, data_source)
             )
             await conn.commit()
             return True

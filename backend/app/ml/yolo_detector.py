@@ -223,6 +223,24 @@ class YOLODetector:
             'count': len(detections)
         }
     
+    def format_context(self, detections: List[Dict[str, Any]]) -> str:
+        """
+        将 YOLO 检测结果格式化为自然语言上下文，供 Qwen-VL 参考。
+
+        Args:
+            detections: detect() 返回的检测结果列表
+
+        Returns:
+            格式化的上下文字符串
+        """
+        if not detections:
+            return "YOLO 模型未检测到任何物品。"
+        
+        parts = ["YOLO 模型检测到以下物品："]
+        for i, d in enumerate(detections, 1):
+            parts.append(f"  {i}. 类别={d['class_name']}，置信度={d['confidence']:.2f}")
+        return "\n".join(parts)
+
     def predict_from_path(
         self,
         image_path: str,
