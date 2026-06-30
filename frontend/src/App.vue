@@ -5,7 +5,7 @@
     </a>
 
     <header v-if="isLoggedIn" class="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-border-light shadow-sm" role="navigation">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+      <div class="px-6 sm:px-10 py-3 flex items-center justify-between">
         <router-link to="/home" class="flex items-center gap-3 group" aria-label="返回首页">
           <div class="relative">
             <div class="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-primary-500/30 group-hover:shadow-xl group-hover:shadow-primary-500/40 transition-all">
@@ -48,10 +48,12 @@
       </div>
     </header>
 
-    <main id="main-content" class="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <main id="main-content" class="flex-1 px-6 sm:px-10 py-6">
       <router-view v-slot="{ Component }">
         <transition name="page" mode="out-in">
-          <component :is="Component" />
+          <keep-alive include="HomePage">
+            <component :is="Component" />
+          </keep-alive>
         </transition>
       </router-view>
     </main>

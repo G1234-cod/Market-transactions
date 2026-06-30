@@ -178,14 +178,6 @@ export async function publishItem(id) {
   return data
 }
 
-export async function markItemSold(id) {
-  const { data } = await api.post(`/history/${id}/sold`, {}, {
-    headers: {
-      ...getAuthHeaders(),
-    }
-  })
-  return data
-}
 
 // ============================================================
 // 商城（分页 + 排序 + 多维筛选）
@@ -373,6 +365,13 @@ export async function getAdminModelMetrics(params = {}) {
   return data
 }
 
+export async function getCheckpointMetrics() {
+  const { data } = await api.get('/admin/model/checkpoint-metrics', {
+    headers: { ...getAuthHeaders() }
+  })
+  return data
+}
+
 export async function triggerModelTraining(modelName, epochs) {
   const { data } = await api.post('/admin/model/train', null, {
     params: { model_name: modelName, epochs },
@@ -521,16 +520,6 @@ export async function getSearchAvailableModels(category = null, brand = null) {
   const resp = await fetch(`/api/v1/search/available-models?${params.toString()}`)
   if (!resp.ok) throw new Error('获取型号列表失败')
   return resp.json()
-}
-
-// ============================================================
-// 重新评估商品
-// ============================================================
-export async function reevaluateItem(itemId) {
-  const { data } = await api.post(`/history/${itemId}/reevaluate`, {}, {
-    headers: { ...getAuthHeaders() }
-  })
-  return data
 }
 
 // ============================================================

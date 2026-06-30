@@ -21,7 +21,7 @@
             <span class="text-4xl">✨</span>
           </div>
         </div>
-        <p class="text-sm text-text-muted">点击上方 "确认并生成文案" 按钮开始</p>
+        <p class="text-sm text-text-muted">点击上方 "确认生成文案并发布" 按钮开始</p>
       </div>
 
       <div v-else-if="active && !text" class="flex items-center justify-center gap-3 py-8">
@@ -47,22 +47,13 @@
             </div>
             <span class="text-sm text-accent-700 font-medium">生成完成</span>
           </div>
-          <div class="flex gap-2">
-            <button
-              class="px-5 py-2.5 rounded-xl text-sm font-medium border border-primary-200 text-primary-600 hover:bg-primary-50 hover:border-primary-300 transition-all focus:ring-2 focus:ring-primary-500 focus:outline-none"
-              @click="copyText"
-              aria-label="复制文案"
-            >
-              {{ copied ? '✓ 已复制' : '📋 复制文案' }}
-            </button>
-            <button
-              class="px-5 py-2.5 rounded-xl text-sm font-medium text-white gradient-accent shadow-md shadow-accent-500/30 hover:shadow-lg hover:shadow-accent-500/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0 focus:ring-2 focus:ring-accent-400 focus:outline-none"
-              @click="$emit('save')"
-              aria-label="保存到记录"
-            >
-              💾 保存到记录
-            </button>
-          </div>
+          <button
+            class="px-5 py-2.5 rounded-xl text-sm font-medium border border-primary-200 text-primary-600 hover:bg-primary-50 hover:border-primary-300 transition-all focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            @click="copyText"
+            aria-label="复制文案"
+          >
+            {{ copied ? '✓ 已复制' : '📋 复制文案' }}
+          </button>
         </div>
       </div>
     </div>
@@ -77,7 +68,6 @@ defineProps({
   active: { type: Boolean, default: false },
   done: { type: Boolean, default: false },
 })
-defineEmits(['save'])
 
 const copied = ref(false)
 // ✅ 修复：使用 template ref 替代 document.querySelector

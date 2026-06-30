@@ -28,7 +28,6 @@
           <option value="" class="bg-white">全部状态</option>
           <option value="published" class="bg-white">已发布</option>
           <option value="delisted" class="bg-white">已下架</option>
-          <option value="sold" class="bg-white">已售出</option>
           <option value="draft" class="bg-white">草稿</option>
         </select>
       </div>
@@ -63,13 +62,6 @@
         <p class="stat-value text-text-muted">{{ items.filter(i => i.status === 'delisted').length }}</p>
         <p class="stat-label">已下架</p>
       </div>
-      <div class="stat-card">
-        <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-success-100 flex items-center justify-center">
-          <span class="text-success-600 text-sm">✅</span>
-        </div>
-        <p class="stat-value text-success-600">{{ items.filter(i => i.status === 'sold').length }}</p>
-        <p class="stat-label">已售出</p>
-      </div>
     </div>
 
     <div v-if="loading" class="space-y-4">
@@ -96,7 +88,7 @@
     </div>
 
     <div v-else class="space-y-4">
-      <HistoryCard v-for="item in filteredItems" :key="item.id" :item="item" @delist="doDelist" @publish="doPublish" @markSold="doMarkSold" @reevaluated="loadHistory" />
+      <HistoryCard v-for="item in filteredItems" :key="item.id" :item="item" @delist="doDelist" @publish="doPublish" />
     </div>
   </div>
 </template>
@@ -105,7 +97,7 @@
 import { ref, computed, onMounted, inject } from 'vue'
 import { useUser } from '../store/user.js'
 import HistoryCard from '../components/HistoryCard.vue'
-import { getHistory, delistItem, publishItem, markItemSold } from '../api/index.js'
+import { getHistory, delistItem, publishItem } from '../api/index.js'
 
 const toast = inject('toast', () => {})
 const { userId } = useUser()
@@ -141,14 +133,6 @@ async function doPublish(id) {
   try {
     await publishItem(id)
     toast('已发布', 'success')
-    await loadHistory()
-  } catch { toast('操作失败', 'error') }
-}
-
-async function doMarkSold(id) {
-  try {
-    await markItemSold(id)
-    toast('已标记为售出', 'success')
     await loadHistory()
   } catch { toast('操作失败', 'error') }
 }

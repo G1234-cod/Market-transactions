@@ -20,7 +20,8 @@ async def register(payload: RegisterRequest, rate: None = Depends(create_rate_li
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="密码至少 6 位")
 
-    role = getattr(payload, 'role', 'user') or 'user'
+    # 公开注册强制为普通用户，管理员只能由管理员后台创建
+    role = 'user'
     ok, uid, msg = await crud.register_user(username, password, role)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)

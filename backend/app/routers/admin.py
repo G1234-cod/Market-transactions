@@ -665,6 +665,93 @@ async def get_model_metrics_stats(
 
 
 # ============================================================
+# 6b. 从 checkpoint 文件读取实际模型训练结果
+# ============================================================
+MODEL_CHECKPOINTS = {
+    "yolo": "app/ml/models/best.pt",
+    "defect": "app/ml/models/defect_best.pt",
+}
+
+@router.get("/admin/model/checkpoint-metrics")
+async def get_checkpoint_metrics(
+    admin_id: int = Depends(get_current_admin),
+):
+    """
+    从模型 checkpoint 文件读取实际训练指标和参数
+
+    返回两个模型的真实训练结果：准确率、召回率、mAP、loss、训练参数等
+    """
+    try:
+        import torch
+        results = {}
+
+        for model_key, rel_path in MODEL_CHECKPOINTS.items():
+            ckpt_path = settings.BASE_DIR / rel_path
+            if not ckpt_path.exists():
+                results[model_key] = {"error": f"模型文件不存在: {rel_path}"}
+                continue
+
+            checkpoint = torch.load(str(ckpt_path), map_location="cpu", weights_only=False)
+
+            args = checkpoint.get("train_args", {})
+            metrics = checkpoint.get("train_metrics", {})
+            train_results = checkpoint.get("train_results", {})
+
+            # 模型架构参数
+            model_yaml = {}
+            if hasattr(checkpoint.get("model"), "yaml"):
+                model_yaml = checkpoint["model"].yaml or {}
+
+            results[model_key] = {
+                # 训练参数
+                "train_params": {
+                    "base_model": args.get("model", "N/A"),
+                    "epochs": args.get("epochs", 0),
+                    "batch_size": args.get("batch", 0),
+                    "image_size": args.get("imgsz", 0),
+                    "learning_rate": args.get("lr0", 0),
+                    "final_lr_ratio": args.get("lrf", 0),
+                    "optimizer": args.get("optimizer", "auto"),
+                    "weight_decay": args.get("weight_decay", 0),
+                    "momentum": args.get("momentum", 0),
+                    "warmup_epochs": args.get("warmup_epochs", 0),
+                    "dropout": args.get("dropout", 0),
+                    "cos_lr": args.get("cos_lr", False),
+                    "patience": args.get("patience", 0),
+                    "device": "GPU" if str(args.get("device", "cpu")) == "0" else "CPU",
+                },
+                # 训练指标
+                "train_metrics": {
+                    "precision": round(metrics.get("metrics/precision(B)", 0), 4),
+                    "recall": round(metrics.get("metrics/recall(B)", 0), 4),
+                    "map50": round(metrics.get("metrics/mAP50(B)", 0), 4),
+                    "map50_95": round(metrics.get("metrics/mAP50-95(B)", 0), 4),
+                    "box_loss": round(metrics.get("val/box_loss", 0), 4),
+                    "cls_loss": round(metrics.get("val/cls_loss", 0), 4),
+                    "dfl_loss": round(metrics.get("val/dfl_loss", 0), 4),
+                    "fitness": round(metrics.get("fitness", 0), 4),
+                },
+                # 模型架构信息
+                "model_arch": {
+                    "type": checkpoint.get("model", type(None)).__class__.__name__ if checkpoint.get("model") else "N/A",
+                    "depth_multiple": model_yaml.get("depth_multiple", "N/A"),
+                    "width_multiple": model_yaml.get("width_multiple", "N/A"),
+                    "num_classes": model_yaml.get("nc", "N/A"),
+                },
+                # 其他信息
+                "file_size_kb": round(ckpt_path.stat().st_size / 1024, 1),
+                "train_date": checkpoint.get("date", "N/A"),
+                "last_epoch": train_results.get("epoch", [0])[-1] if isinstance(train_results.get("epoch"), list) and train_results.get("epoch") else 0,
+                "training_time_seconds": train_results.get("time", [0])[-1] if isinstance(train_results.get("time"), list) and train_results.get("time") else 0,
+            }
+
+        return {"success": True, "models": results}
+    except Exception as e:
+        logger.error(f"读取模型checkpoint失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # 7. 系统数据统计接口 —— 展示项目整体数据情况
 # ============================================================
 @router.get("/admin/system/stats")
@@ -688,10 +775,7 @@ async def get_system_stats(
                 
                 await cur.execute("SELECT COUNT(*) as count FROM published_items WHERE status = 'published'")
                 published_count = await cur.fetchone()
-                
-                await cur.execute("SELECT COUNT(*) as count FROM published_items WHERE status = 'sold'")
-                sold_count = await cur.fetchone()
-                
+
                 await cur.execute("SELECT COUNT(*) as count FROM hard_cases")
                 hard_case_count = await cur.fetchone()
                 
@@ -723,7 +807,6 @@ async def get_system_stats(
                 'users': user_count['count'] if user_count else 0,
                 'total_items': item_count['count'] if item_count else 0,
                 'published_items': published_count['count'] if published_count else 0,
-                'sold_items': sold_count['count'] if sold_count else 0,
                 'categories': category_count['count'] if category_count else 0,
                 'brands': brand_count['count'] if brand_count else 0,
                 'audit_logs': audit_count['count'] if audit_count else 0,
@@ -763,9 +846,24 @@ async def get_hard_cases(
             cases = await crud.get_hard_cases(limit=limit, offset=offset, is_fixed=bool(is_fixed_value), sort_by=sort_by)
         else:
             cases = await crud.get_hard_cases(limit=limit, offset=offset, is_fixed=False, sort_by=sort_by)
-        
+
+        # ✅ 将本地文件路径转换为 Web 可访问的 URL
+        error_data_base = str(settings.BASE_DIR / "data" / "error_data")
+        for case in cases:
+            img = case.get('image_url', '')
+            if img:
+                try:
+                    rel = os.path.relpath(img, error_data_base)
+                    if not rel.startswith('..'):
+                        case['image_url'] = f"/static/error_data/{rel.replace(os.sep, '/')}"
+                    else:
+                        # 路径不在 error_data 目录下，尝试用文件名
+                        case['image_url'] = f"/static/error_data/images/{os.path.basename(img)}"
+                except ValueError:
+                    case['image_url'] = f"/static/error_data/images/{os.path.basename(img)}"
+
         stats = await crud.get_hard_cases_stats()
-        
+
         return {
             'success': True,
             'cases': cases,

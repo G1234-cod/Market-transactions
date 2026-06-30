@@ -56,7 +56,7 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
       <div class="stat-card">
         <p class="stat-value text-text-primary">{{ items.length }}</p>
         <p class="stat-label">全部商品</p>
@@ -71,7 +71,7 @@
       </div>
     </div>
 
-    <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-if="loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
       <div v-for="i in 6" :key="i" class="glass-card p-4 animate-pulse">
         <div class="w-full h-48 bg-gradient-to-br from-surface-secondary to-surface-tertiary rounded-xl mb-4" />
         <div class="h-5 bg-surface-tertiary rounded-lg w-3/4 mb-2" />
@@ -93,7 +93,7 @@
       <router-link v-else to="/login" class="mt-5 inline-block btn-primary">登录后发布 →</router-link>
     </div>
 
-    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5">
       <!-- ✅ R8: 卡片展示：图片 + 发布人/品牌/型号/品类 + 参考价格 -->
       <div v-for="item in items" :key="item.id"
         class="glass-card-hover overflow-hidden h-full flex flex-col">

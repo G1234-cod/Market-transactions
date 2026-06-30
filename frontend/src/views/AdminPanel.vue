@@ -8,7 +8,7 @@
       <div class="badge badge-warning">管理员</div>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
       <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'users'">
         <div class="stat-value text-primary-600">{{ stats.overview?.users || 0 }}</div>
         <div class="stat-label">👤 注册用户</div>
@@ -49,14 +49,10 @@
             </div>
           </div>
           <div class="p-6">
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
               <div class="bg-surface-secondary rounded-xl p-4">
                 <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.total_items || 0 }}</div>
                 <div class="text-xs text-text-muted">商品总数</div>
-              </div>
-              <div class="bg-surface-secondary rounded-xl p-4">
-                <div class="text-2xl font-bold text-accent-600">{{ stats.overview?.sold_items || 0 }}</div>
-                <div class="text-xs text-text-muted">已售出</div>
               </div>
               <div class="bg-surface-secondary rounded-xl p-4">
                 <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.categories || 0 }}</div>
@@ -368,137 +364,95 @@
 
       <!-- ==================== 训练指标 ==================== -->
       <div v-else-if="activeTab === 'metrics'" key="metrics" class="space-y-6">
-        <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
-            <h2 class="font-semibold text-text-primary">📈 模型训练指标</h2>
-          </div>
-          <div class="p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <div class="text-3xl font-bold text-primary-600">{{ (modelMetricsStats.avg_accuracy * 100)?.toFixed(2) || '0.00' }}%</div>
-                <div class="text-xs text-text-muted">平均准确率</div>
-              </div>
-              <div>
-                <div class="text-3xl font-bold text-accent-600">{{ (modelMetricsStats.avg_f1 * 100)?.toFixed(2) || '0.00' }}%</div>
-                <div class="text-xs text-text-muted">平均F1分数</div>
-              </div>
-              <div>
-                <div class="text-3xl font-bold text-text-primary">{{ modelMetricsStats.total || 0 }}</div>
-                <div class="text-xs text-text-muted">训练次数</div>
-              </div>
-            </div>
-
-            <div v-if="modelMetrics.length > 0" class="space-y-3 max-h-96 overflow-y-auto">
-              <div v-for="metric in modelMetrics" :key="metric.id" class="bg-surface-secondary rounded-xl p-4">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="font-medium text-sm">{{ metric.model_name === 'yolo' ? '分类模型 (YOLO)' : '瑕疵检测模型' }}</span>
-                  <span class="text-xs text-text-muted">{{ formatDate(metric.training_date) }}</span>
-                </div>
-                <div class="grid grid-cols-4 gap-4">
-                  <div>
-                    <div class="text-sm font-semibold">{{ metric.accuracy ? (metric.accuracy * 100).toFixed(2) + '%' : '-' }}</div>
-                    <div class="text-xs text-text-muted">准确率</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- 模型卡片模板 -->
+          <template v-for="m in [
+            { key: 'yolo', title: '分类模型', subtitle: 'YOLOv8n 商品分类识别', icon: '🔍', color: 'blue', data: yoloMetrics },
+            { key: 'defect', title: '瑕疵检测模型', subtitle: 'YOLOv8n 缺陷检测与成色分级', icon: '🔬', color: 'amber', data: defectMetrics }
+          ]" :key="m.key">
+            <div class="glass-card overflow-hidden">
+              <div :class="`bg-gradient-to-r ${m.color === 'blue' ? 'from-blue-500 to-blue-600' : 'from-amber-500 to-orange-600'} px-6 py-4`">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg font-bold">{{ m.icon }}</div>
+                    <div>
+                      <h3 class="font-bold text-white text-lg">{{ m.title }}</h3>
+                      <p class="text-xs opacity-80">{{ m.subtitle }}</p>
+                    </div>
                   </div>
-                  <div>
-                    <div class="text-sm font-semibold">{{ metric.precision ? (metric.precision * 100).toFixed(2) + '%' : '-' }}</div>
-                    <div class="text-xs text-text-muted">精确率</div>
-                  </div>
-                  <div>
-                    <div class="text-sm font-semibold">{{ metric.recall ? (metric.recall * 100).toFixed(2) + '%' : '-' }}</div>
-                    <div class="text-xs text-text-muted">召回率</div>
-                  </div>
-                  <div>
-                    <div class="text-sm font-semibold">{{ metric.f1_score ? (metric.f1_score * 100).toFixed(2) + '%' : '-' }}</div>
-                    <div class="text-xs text-text-muted">F1分数</div>
+                  <div v-if="m.data.train_date" class="text-right text-xs text-white/70">
+                    <div>训练日期</div>
+                    <div class="font-medium">{{ m.data.train_date?.slice(0, 10) }}</div>
                   </div>
                 </div>
               </div>
-            </div>
-            <div v-else class="text-center py-8 text-text-muted">
-              <div class="text-4xl mb-2">📊</div>
-              <p>暂无训练指标数据</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- 触发模型训练 -->
-        <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
-            <h2 class="font-semibold text-text-primary">⚙️ 模型训练</h2>
-            <div class="flex items-center gap-2">
-              <span v-if="weeklySchedulerRunning" class="text-xs text-accent-600 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent-500 animate-pulse"></span> 每周自动训练运行中</span>
-              <span v-else class="text-xs text-text-muted">调度器待启动</span>
-            </div>
-          </div>
-          <div class="p-6">
-            <div class="space-y-4">
-              <div class="flex gap-4">
-                <select v-model="trainingModel" class="input-field flex-1">
-                  <option value="yolo">分类模型 (YOLO)</option>
-                  <option value="defect">瑕疵检测模型</option>
-                </select>
-                <select v-model="trainingEpochs" class="input-field w-32">
-                  <option :value="5">5 轮</option>
-                  <option :value="10">10 轮</option>
-                  <option :value="20">20 轮</option>
-                  <option :value="30">30 轮</option>
-                  <option :value="50">50 轮</option>
-                </select>
-              </div>
-              <button
-                class="btn-primary w-full"
-                :disabled="training || hasRunningJob"
-                @click="triggerTraining"
-              >
-                <span v-if="training" class="loading-spinner mr-2" />
-                <span>{{ training ? '启动中...' : hasRunningJob ? '训练进行中...' : '🚀 触发训练' }}</span>
-              </button>
-
-              <!-- ✅ 训练进度条 -->
-              <div v-if="activeJobs.length" class="space-y-3">
-                <div v-for="job in activeJobs" :key="job.job_id" class="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-semibold text-primary-700">{{ job.model_name === 'yolo' ? '分类模型' : '瑕疵模型' }} 训练中</span>
-                    <span class="text-xs text-primary-500">{{ job.progress }}%</span>
+              <div class="p-5 space-y-4">
+                <template v-if="m.data.train_metrics">
+                  <!-- 核心指标 -->
+                  <div class="grid grid-cols-2 gap-2">
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.precision) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">精确率 Precision</div>
+                    </div>
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.recall) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">召回率 Recall</div>
+                    </div>
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.map50) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">mAP@50</div>
+                    </div>
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.map50_95) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">mAP@50-95</div>
+                    </div>
                   </div>
-                  <div class="w-full h-3 bg-primary-200 rounded-full overflow-hidden">
-                    <div class="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-1000"
-                      :style="{ width: job.progress + '%' }" />
+
+                  <!-- Loss 曲线 -->
+                  <div class="border-t border-border pt-3">
+                    <div class="text-xs text-text-muted font-medium mb-2">验证 Loss</div>
+                    <div class="grid grid-cols-3 gap-2">
+                      <div class="bg-surface-secondary rounded-lg p-2 text-center">
+                        <div class="text-sm font-semibold text-text-primary">{{ m.data.train_metrics.box_loss?.toFixed(3) }}</div>
+                        <div class="text-xs text-text-muted">Box</div>
+                      </div>
+                      <div class="bg-surface-secondary rounded-lg p-2 text-center">
+                        <div class="text-sm font-semibold text-text-primary">{{ m.data.train_metrics.cls_loss?.toFixed(3) }}</div>
+                        <div class="text-xs text-text-muted">Cls</div>
+                      </div>
+                      <div class="bg-surface-secondary rounded-lg p-2 text-center">
+                        <div class="text-sm font-semibold text-text-primary">{{ m.data.train_metrics.dfl_loss?.toFixed(3) }}</div>
+                        <div class="text-xs text-text-muted">DFL</div>
+                      </div>
+                    </div>
                   </div>
-                  <p class="text-xs text-text-muted mt-2">轮数: {{ job.epochs }} | 启动: {{ job.started_at?.slice(11,19) }}</p>
+
+                  <!-- 模型参数 -->
+                  <div class="border-t border-border pt-3">
+                    <div class="text-xs text-text-muted font-medium mb-2">核心训练参数</div>
+                    <div class="grid grid-cols-3 gap-x-3 gap-y-1.5 text-xs">
+                      <div class="flex justify-between"><span class="text-text-muted">基础模型</span><span class="font-medium">{{ m.data.train_params?.base_model || '-' }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">训练轮数</span><span class="font-medium">{{ m.data.train_params?.epochs }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">Batch</span><span class="font-medium">{{ m.data.train_params?.batch_size }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">图片尺寸</span><span class="font-medium">{{ m.data.train_params?.image_size }}px</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">学习率</span><span class="font-medium">{{ m.data.train_params?.learning_rate }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">优化器</span><span class="font-medium">{{ m.data.train_params?.optimizer }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">设备</span><span class="font-medium">{{ m.data.train_params?.device }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">Dropout</span><span class="font-medium">{{ m.data.train_params?.dropout }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">Cos LR</span><span class="font-medium">{{ m.data.train_params?.cos_lr ? '✓' : '✗' }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">类别数</span><span class="font-medium">{{ m.data.model_arch?.num_classes }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">模型大小</span><span class="font-medium">{{ m.data.file_size_kb ? (m.data.file_size_kb / 1024).toFixed(1) + ' MB' : '-' }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">训练耗时</span><span class="font-medium">{{ fmtTime(m.data.training_time_seconds) }}</span></div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="text-center py-8 text-text-muted">
+                  <div class="text-4xl mb-2">📊</div>
+                  <p class="text-sm">{{ m.data.error || '暂无训练数据' }}</p>
                 </div>
               </div>
-
-              <div v-if="trainingResult" class="rounded-xl p-4"
-                :class="trainingResult.success ? 'bg-accent-50' : 'bg-danger-50'">
-                <p class="text-sm" :class="trainingResult.success ? 'text-accent-700' : 'text-danger-700'">
-                  {{ trainingResult.message || (trainingResult.success ? '训练已启动' : '训练失败') }}
-                </p>
-              </div>
-
-              <!-- ✅ 最近完成 -->
-              <div v-if="recentJobs.length" class="text-xs text-text-muted space-y-1">
-                <p class="font-medium">最近训练记录：</p>
-                <div v-for="job in recentJobs" :key="job.job_id" class="flex items-center gap-2">
-                  <span :class="job.status === 'completed' ? 'text-accent-600' : 'text-danger-600'">
-                    {{ job.status === 'completed' ? '✅' : '❌' }}
-                  </span>
-                  <span>{{ job.model_name }}</span>
-                  <span>{{ job.started_at?.slice(0,16) }}</span>
-                </div>
-              </div>
-
-              <!-- 训练计划提示 -->
-              <div class="bg-surface-secondary rounded-xl p-3 text-xs text-text-muted">
-                <p class="font-medium mb-1">📅 训练计划：</p>
-                <ul class="list-disc list-inside space-y-0.5">
-                  <li>✅ 每周一凌晨2点自动训练（已启用）</li>
-                  <li>手动训练：积累错误案例后随时触发</li>
-                  <li>差异数据积累到 50+ 条后建议重新训练</li>
-                </ul>
-              </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
 
@@ -589,40 +543,6 @@
         </div>
       </div>
 
-      <!-- ==================== 品类管理 ==================== -->
-      <div v-if="activeTab === 'categories'" key="categories" class="space-y-6">
-        <div class="glass-card">
-          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
-            <h2 class="font-semibold text-text-primary">🏷️ 品类品牌管理</h2>
-            <span class="text-xs text-text-muted">{{ categoryBrandList.length }} 个品牌 · {{ Object.keys(groupedCategories).length }} 大类</span>
-          </div>
-          <div class="p-6">
-            <!-- 新增 -->
-            <div class="flex gap-3 mb-6">
-              <input v-model="newCategory" placeholder="大类（如：耳机）" class="input-field flex-1" />
-              <input v-model="newBrand" placeholder="品牌（如：华为）" class="input-field flex-1" />
-              <button class="btn-primary-sm whitespace-nowrap" @click="addCategoryBrand" :disabled="!newCategory || !newBrand">
-                ➕ 添加
-              </button>
-            </div>
-            <!-- 列表 -->
-            <div v-if="Object.keys(groupedCategories).length" class="space-y-4">
-              <div v-for="(brands, cat) in groupedCategories" :key="cat" class="border border-border rounded-xl overflow-hidden">
-                <div class="bg-surface-secondary px-4 py-2.5 flex items-center justify-between">
-                  <span class="font-semibold text-text-primary text-sm">{{ cat }}</span>
-                  <span class="text-xs text-text-muted">{{ brands.length }} 个品牌</span>
-                </div>
-                <div class="p-3 flex flex-wrap gap-2">
-                  <span v-for="b in brands" :key="b" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-border text-text-secondary">
-                    {{ b }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div v-else class="text-center py-8 text-text-muted">暂无数据</div>
-          </div>
-        </div>
-      </div>
       </div> <!-- end :key wrapper -->
     </transition>
   </div>
@@ -636,15 +556,11 @@ import {
   testModel,
   getAdminReviewItems,
   forceDelistItem,
-  getAdminModelMetrics,
-  triggerModelTraining,
-  getTrainingStatus,
+  getCheckpointMetrics,
   getAdminUsers,
   createAdminUser,
   deleteAdminUser,
   toggleUserStatus,
-  getAdminCategories,
-  addAdminCategory,
   getAdminHardCases,
   markHardCaseFixed,
   syncQdrant,
@@ -659,7 +575,6 @@ const tabs = [
   { id: 'metrics', label: '📈 训练指标' },
   { id: 'cases', label: '📝 错误案例' },
   { id: 'users', label: '👤 用户管理' },
-  { id: 'categories', label: '🏷️ 品类管理' },
 ]
 
 const activeTab = ref('stats')
@@ -682,30 +597,26 @@ const reviewStatusFilter = ref('')
 const reviewSearch = ref('')
 
 // ==================== Metrics ====================
-const modelMetrics = ref([])
-const modelMetricsStats = ref({})
-const trainingModel = ref('yolo')
-const trainingEpochs = ref(10)
-const training = ref(false)
-const trainingResult = ref(null)
-// ✅ 训练进度追踪
-const activeJobs = ref([])
-const recentJobs = ref([])
-const hasRunningJob = ref(false)
-const weeklySchedulerRunning = ref(false)
-let _trainingPollTimer = 0
+const yoloMetrics = ref({})
+const defectMetrics = ref({})
+
+function fmtPct(val) {
+  if (val == null || isNaN(val)) return '-'
+  return (val * 100).toFixed(2) + '%'
+}
+function fmtTime(seconds) {
+  if (!seconds || seconds <= 0) return '-'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
 
 // ==================== Users ====================
 const adminUsers = ref([])
 const newUsername = ref('')
 const newPassword = ref('')
 const newUserRole = ref('user')
-
-// ==================== Categories ====================
-const categoryBrandList = ref([])
-const groupedCategories = ref({})
-const newCategory = ref('')
-const newBrand = ref('')
 
 // ==================== Cases ====================
 const hardCases = ref([])
@@ -887,53 +798,14 @@ async function confirmForceDelist(item) {
 
 async function loadModelMetrics() {
   try {
-    const result = await getAdminModelMetrics()
-    modelMetrics.value = result.metrics || []
-    modelMetricsStats.value = result.stats || {}
+    const result = await getCheckpointMetrics()
+    if (result.success && result.models) {
+      yoloMetrics.value = result.models.yolo || { error: '无数据' }
+      defectMetrics.value = result.models.defect || { error: '无数据' }
+    }
   } catch (e) {
     console.error('加载模型指标失败:', e)
   }
-}
-
-async function triggerTraining() {
-  training.value = true
-  trainingResult.value = null
-
-  try {
-    trainingResult.value = await triggerModelTraining(trainingModel.value, trainingEpochs.value)
-    if (trainingResult.value.success) {
-      startTrainingPolling()
-    }
-    setTimeout(loadModelMetrics, 2000)
-  } catch (e) {
-    console.error('触发训练失败:', e)
-    trainingResult.value = { success: false, message: '训练失败: ' + (e.message || '未知错误') }
-  } finally {
-    training.value = false
-  }
-}
-
-// ✅ 轮询训练状态（每10秒）
-async function pollTrainingStatus() {
-  try {
-    const result = await getTrainingStatus()
-    activeJobs.value = result.active_jobs || []
-    recentJobs.value = result.recent_jobs || []
-    hasRunningJob.value = result.has_running || false
-    weeklySchedulerRunning.value = true  // 调度器随服务启动
-  } catch (e) {
-    console.error('轮询训练状态失败:', e)
-  }
-}
-
-function startTrainingPolling() {
-  clearInterval(_trainingPollTimer)
-  pollTrainingStatus()
-  _trainingPollTimer = setInterval(pollTrainingStatus, 10000)
-}
-
-function stopTrainingPolling() {
-  clearInterval(_trainingPollTimer)
 }
 
 async function loadHardCases() {
@@ -993,38 +865,6 @@ async function toggleUser(u) {
   } catch (e) { alert('操作失败: ' + (e?.response?.data?.detail || e.message)) }
 }
 
-// ==================== Categories ====================
-
-async function loadCategories() {
-  try {
-    const result = await getAdminCategories()
-    if (result.success) {
-      categoryBrandList.value = result.category_brands || {}
-      // Group by category
-      const grouped = {}
-      for (const [cat, brands] of Object.entries(result.category_brands || {})) {
-        grouped[cat] = brands
-      }
-      groupedCategories.value = grouped
-    }
-  } catch (e) {
-    console.error('加载品类失败:', e)
-  }
-}
-
-async function addCategoryBrand() {
-  if (!newCategory.value || !newBrand.value) return
-  try {
-    await addAdminCategory(newCategory.value.trim(), newBrand.value.trim())
-    newCategory.value = ''
-    newBrand.value = ''
-    loadCategories()
-    loadStats()
-  } catch (e) {
-    alert('添加失败: ' + (e?.response?.data?.detail || e.message || '未知错误'))
-  }
-}
-
 async function doSyncQdrant() {
   try {
     const result = await syncQdrant()
@@ -1038,15 +878,9 @@ async function doSyncQdrant() {
 watch(activeTab, (tab) => {
   if (tab === 'stats') loadStats()
   else if (tab === 'review') loadReviewItems()
-  else if (tab === 'metrics') { loadModelMetrics(); startTrainingPolling() }
-  else if (tab === 'categories') loadCategories()
-  stopTrainingPolling()
-  if (tab === 'stats') loadStats()
-  else if (tab === 'review') loadReviewItems()
-  else if (tab === 'metrics') { loadModelMetrics(); startTrainingPolling() }
+  else if (tab === 'metrics') loadModelMetrics()
   else if (tab === 'cases') loadHardCases()
   else if (tab === 'users') loadUsers()
-  else if (tab === 'categories') loadCategories()
 })
 
 onMounted(() => {
@@ -1055,8 +889,6 @@ onMounted(() => {
   loadModelMetrics()
   loadHardCases()
   loadUsers()
-  loadCategories()
-  pollTrainingStatus()  // 初始化训练状态
 })
 </script>
 
