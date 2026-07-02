@@ -8,6 +8,15 @@
 backend/static/uploads/*
 !backend/static/uploads/.gitkeep
 
+# 前端构建产物（可通过 npm run build 生成）
+backend/static/dist/
+
+# 错误数据（模型误判的测试图片和标签）
+backend/data/error_data/
+
+# Qdrant 向量数据库本地存储（运行时自动创建）
+backend/data/qdrant/
+
 # Python
 __pycache__/
 *.pyc
@@ -33,8 +42,15 @@ Thumbs.db
 
 run_weekly_train.bat
 
-# ML 模型权重文件（太大，训练产物）
-*.pt
+# ML 预训练模型（可自动下载，体积大）
+yolov8m.pt
+backend/yolov8n.pt
+
+# 保留项目核心训练模型（需要上传）
+!backend/app/ml/models/best.pt
+!backend/app/ml/models/defect_best.pt
+
+# 其他 ML 模型权重文件（太大，训练产物）
 *.pth
 *.onnx
 *.bin
