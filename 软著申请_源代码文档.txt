@@ -1,0 +1,3371 @@
+========================================================================
+     智能二手商品发布助手 V1.0
+     软件著作权登记 —— 源代码文档
+
+     开发完成日期：2025年__月__日
+     开发方式：合作开发    开发人数：2人
+     编程语言：Python (FastAPI) + JavaScript (Vue 3)
+     提交：前30页(开头) + 后30页(结尾) = 60页
+     每页：50行    总行数：3000行
+     生成日期：2026年08月12日
+========================================================================
+
+
+智能二手商品发布助手 V1.0                                        第 1 / 60 页
+------------------------------------------------------------------------
+"""FastAPI 应用入口"""
+import os
+# ✅ 国内网络环境：使用 HuggingFace 镜像下载模型
+os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, status, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from app.routers import (
+    auth,
+    detect,
+    extract,
+    generate,
+    history,
+    market,
+    notifications,
+    price,
+    price_history,
+    process,
+    recognition,
+    search,
+    admin,
+)
+from app.config import settings
+from app.db.connection import init_db, shutdown_db
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+# ============================================================
+# ✅ 应用生命周期管理（使用 lifespan 替代弃用的 on_event）
+# ============================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用启动/关闭生命周期管理"""
+    logger.info("🚀 应用启动中...")
+    await init_db()
+    # 启动时验证配置
+    from app.config import validate_config
+    config_errors = validate_config()
+    if config_errors:
+        for err in config_errors:
+            if err.startswith("❌"):
+                logger.error(f"配置错误: {err}")
+            else:
+                logger.warning(f"配置警告: {err}")
+    # 启动后台限流清理任务
+    cleanup_task = None
+    try:
+------------------------------------------------------------------------
+第 1 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 2 / 60 页
+------------------------------------------------------------------------
+        from app.middleware.rate_limit import periodic_cleanup
+        import asyncio as _asyncio
+        cleanup_task = _asyncio.create_task(periodic_cleanup())
+    except Exception as e:
+        logger.warning(f"⚠️ 后台限流清理任务启动失败: {e}")
+    # ✅ 启动每周自动训练调度器
+    try:
+        from app.routers.admin import start_weekly_scheduler
+        start_weekly_scheduler()
+    except Exception as e:
+        logger.warning(f"⚠️ 每周自动训练调度器启动失败: {e}")
+    logger.info("✅ 应用启动完成")
+    yield  # 应用运行中
+    logger.info("🔄 应用关闭中...")
+    if cleanup_task:
+        cleanup_task.cancel()
+    await shutdown_db()
+    logger.info("✅ 应用已关闭")
+app = FastAPI(title="智能二手商品发布助手", version="1.0.0", lifespan=lifespan)
+# ============================================================
+# ✅ 安全响应头中间件
+# ============================================================
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """添加安全相关的 HTTP 响应头"""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Cache-Control"] = "no-store"
+        # ✅ 生产环境 CSP：允许 Google Fonts + Cloudflare 的脚本和样式
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob: https:; "
+            "connect-src 'self' https:; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        if settings.ENV == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+app.add_middleware(SecurityHeadersMiddleware)
+# ============================================================
+# CORS 配置（收紧：仅允许必要的 methods 和 headers）
+# ============================================================
+allowed_origins = settings.ALLOWED_ORIGINS
+------------------------------------------------------------------------
+第 2 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 3 / 60 页
+------------------------------------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+    expose_headers=["Content-Type"],
+    max_age=600,
+)
+# ============================================================
+# 挂载路由
+# ============================================================
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(detect.router, prefix="/api/v1")
+app.include_router(extract.router, prefix="/api/v1")
+app.include_router(generate.router, prefix="/api/v1")
+app.include_router(history.router, prefix="/api/v1")
+app.include_router(market.router, prefix="/api/v1")
+app.include_router(price.router, prefix="/api/v1")
+app.include_router(price_history.router, prefix="/api/v1")
+app.include_router(process.router, prefix="/api/v1")
+app.include_router(recognition.router, prefix="/api/v1")
+app.include_router(search.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
+# ============================================================
+# 挂载静态文件目录
+# ============================================================
+# 确保上传目录存在
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+# 挂载错误案例图片目录（必须在 /static 之前注册，否则会被 /static 拦截）
+error_data_dir = str(settings.BASE_DIR / "data" / "error_data")
+if os.path.exists(error_data_dir):
+    app.mount(f"{settings.STATIC_PREFIX}/error_data", StaticFiles(directory=error_data_dir), name="error-data")
+# ✅ 修复：使用显式的 STATIC_DIR 配置，而非从 UPLOAD_DIR 解析
+static_dir = str(settings.BASE_DIR / "static")
+app.mount(settings.STATIC_PREFIX, StaticFiles(directory=static_dir), name="static")
+# ============================================================
+# 挂载前端构建产物的资源文件
+# ============================================================
+frontend_dist_dir = str(settings.BASE_DIR / "static" / "dist")
+if os.path.exists(frontend_dist_dir):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_dir, "assets")), name="frontend-assets")
+# ============================================================
+# 健康检查 / 根路径
+# ============================================================
+@app.get("/")
+async def root(request: Request):
+    frontend_dist_dir = str(settings.BASE_DIR / "static" / "dist")
+    index_path = os.path.join(frontend_dist_dir, "index.html")
+------------------------------------------------------------------------
+第 3 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 4 / 60 页
+------------------------------------------------------------------------
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(content=f.read(), media_type="text/html")
+    return {
+        "service": "智能二手商品发布助手",
+        "version": "1.0.0",
+        "env": settings.ENV,
+    }
+@app.get("/health")
+async def health():
+    """健康检查接口"""
+    try:
+        from app.db.connection import health_check
+        db_ok = await health_check()
+        if not db_ok:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"status": "unhealthy", "database": "disconnected", "env": settings.ENV}
+            )
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "env": settings.ENV,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        # ✅ 修复：不暴露内部错误详情
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "unhealthy", "database": "error", "env": settings.ENV}
+        )
+# ============================================================
+# SPA 回退路由：前端 Vue Router 的 history 模式需要
+# 所有非 API / 非静态文件 / 非健康检查 的 GET 请求都返回 index.html
+# ============================================================
+from fastapi.responses import HTMLResponse
+SPA_ROUTES = {
+    "/market", "/market/",
+    "/history", "/history/",
+    "/login", "/login/",
+    "/register", "/register/",
+    "/search", "/search/",
+    "/home", "/home/",
+    "/admin", "/admin/",
+    "/notifications", "/notifications/",
+    "/price-history", "/price-history/",
+}
+SPA_INDEX_PATH = os.path.join(frontend_dist_dir, "index.html") if os.path.exists(frontend_dist_dir) else None
+------------------------------------------------------------------------
+第 4 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 5 / 60 页
+------------------------------------------------------------------------
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def spa_fallback(full_path: str, request: Request):
+    """SPA 回退：将前端路由请求返回 index.html"""
+    # API / 静态文件 / 文档 等路径不拦截
+    if full_path.startswith("api/") or full_path.startswith("static/") or full_path == "health" or full_path.startswith("docs") or full_path == "openapi.json":
+        raise HTTPException(status_code=404)
+    if SPA_INDEX_PATH:
+        with open(SPA_INDEX_PATH, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read(), media_type="text/html")
+    raise HTTPException(status_code=404)
+"""
+一键启动后端：启动 Qdrant → 索引数据 → 启动服务 → 打开浏览器
+用法:
+    python run-backend.py                   # 默认：启动 Qdrant + 索引 + 启动服务
+    python run-backend.py --skip-qdrant     # 跳过 Qdrant
+    python run-backend.py --skip-index      # 跳过索引
+    python run-backend.py --no-browser      # 不自动打开浏览器
+"""
+import os
+# ✅ 国内网络环境：使用 HuggingFace 镜像下载模型
+os.environ.setdefault('HF_ENDPOINT', 'https://hf-mirror.com')
+import subprocess
+import time
+import webbrowser
+import argparse
+import urllib.request
+from pathlib import Path
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = SCRIPT_DIR.parent
+os.chdir(SCRIPT_DIR)
+def step(msg):
+    print(f"\n{'='*50}")
+    print(f"  {msg}")
+    print(f"{'='*50}")
+def ok(msg):
+    print(f"  [OK] {msg}")
+def fail(msg):
+    print(f"  [FAIL] {msg}")
+def run(cmd, timeout=120):
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, cwd=SCRIPT_DIR)
+        return r.returncode, (r.stdout + r.stderr).strip()
+    except subprocess.TimeoutExpired:
+        return -1, "timeout"
+    except Exception as e:
+        return -1, str(e)
+# ============================================================
+def start_qdrant():
+    step("启动 Qdrant 向量数据库")
+    # Docker 可用？
+------------------------------------------------------------------------
+第 5 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 6 / 60 页
+------------------------------------------------------------------------
+    code, _ = run("docker --version")
+    if code != 0:
+        fail("Docker 未安装或未启动，跳过")
+        return False
+    # 已经在运行？
+    try:
+        urllib.request.urlopen(urllib.request.Request("http://localhost:6333/healthz"), timeout=3)
+        ok("Qdrant 已在运行")
+        return True
+    except Exception:
+        pass
+    # 启动
+    data_dir = PROJECT_DIR / "backend" / "data" / "qdrant"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    code, out = run(f'docker run -d -p 6333:6333 -v "{data_dir}":/qdrant/storage qdrant/qdrant:latest')
+    if code != 0:
+        fail(f"启动失败: {out[:200]}")
+        return False
+    # 等待就绪
+    for i in range(15):
+        time.sleep(2)
+        try:
+            urllib.request.urlopen(urllib.request.Request("http://localhost:6333/healthz"), timeout=3)
+            ok("Qdrant 就绪")
+            return True
+        except Exception:
+            print(f"  等待... ({i+1}/15)")
+    fail("Qdrant 启动超时")
+    return False
+# ============================================================
+def index_items():
+    step("以图搜图索引")
+    code, out = run("python scripts/index_items.py --all")
+    if code == 0:
+        ok("索引完成")
+    else:
+        print(f"  {out[:300]}") if out else None
+# ============================================================
+def start_server(open_browser=True):
+    step("启动后端服务")
+    print(f"  后端:    http://localhost:8000")
+    print(f"  文档:    http://localhost:8000/docs")
+    print(f"  Ctrl+C  停止\n{'='*50}\n")
+    if open_browser:
+        time.sleep(2)
+        webbrowser.open("http://localhost:8000/docs")
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+# ============================================================
+def main():
+------------------------------------------------------------------------
+第 6 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 7 / 60 页
+------------------------------------------------------------------------
+    parser = argparse.ArgumentParser(description="一键启动后端")
+    parser.add_argument("--skip-qdrant", action="store_true")
+    parser.add_argument("--skip-index", action="store_true")
+    parser.add_argument("--no-browser", action="store_true")
+    args = parser.parse_args()
+    print("\n  智能二手商品发布助手 - 后端启动\n")
+    qdrant_ok = True
+    if not args.skip_qdrant:
+        qdrant_ok = start_qdrant()
+    if qdrant_ok and not args.skip_index:
+        index_items()
+    start_server(open_browser=not args.no_browser)
+if __name__ == "__main__":
+    main()
+"""应用配置管理 —— 从 .env 文件读取所有环境变量"""
+import os
+import logging
+from pathlib import Path
+from typing import Optional
+from dotenv import load_dotenv
+from fastapi import Request
+# ✅ 修复：显式指定 .env 路径（避免 CWD 不同导致找不到）
+_env_path = Path(__file__).parent.parent / '.env'
+_env_loaded = load_dotenv(dotenv_path=_env_path)
+logger = logging.getLogger(__name__)
+if not _env_loaded:
+    logger.warning(f"⚠️ 未找到 .env 文件 ({_env_path})，使用默认配置（部分功能可能不可用）")
+class Settings:
+    # ============================================================
+    # DeepSeek API
+    # ============================================================
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    # ============================================================
+    # Qwen API（阿里云百炼）
+    # ============================================================
+    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "")
+    QWEN_VL_MODEL: str = os.getenv("QWEN_VL_MODEL", "qwen-vl-max")
+    # ============================================================
+    # MySQL 数据库
+    # ============================================================
+    DB_HOST: str = os.getenv("DB_HOST", "localhost")
+    DB_PORT: int = int(os.getenv("DB_PORT", "3306"))
+    DB_USER: str = os.getenv("DB_USER", "root")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
+    DB_NAME: str = os.getenv("DB_NAME", "market_transactions")
+    # ============================================================
+    # JWT 认证配置
+    # ============================================================
+------------------------------------------------------------------------
+第 7 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 8 / 60 页
+------------------------------------------------------------------------
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 默认 7 天
+    # ============================================================
+    # 图片上传
+    # ============================================================
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "static/uploads")
+    MAX_IMAGE_COUNT: int = int(os.getenv("MAX_IMAGE_COUNT", "3"))
+    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB
+    # ============================================================
+    # ML 模型路径
+    # ============================================================
+    BASE_DIR: Path = Path(__file__).parent.parent
+    MODELS_DIR: Path = BASE_DIR / "app" / "ml" / "models"
+    YOLO_MODEL_PATH: str = os.getenv("YOLO_MODEL_PATH", str(MODELS_DIR / "best.pt"))
+    DEFECT_MODEL_PATH: str = os.getenv("DEFECT_MODEL_PATH", str(MODELS_DIR / "defect_best.pt"))
+    YOLO_PRETRAINED_PATH: str = os.getenv("YOLO_PRETRAINED_PATH", "yolov8n.pt")
+    # ============================================================
+    # Qdrant 向量数据库配置
+    # ============================================================
+    QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
+    QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
+    QDRANT_COLLECTION: str = os.getenv("QDRANT_COLLECTION", "market_items")
+    QDRANT_VECTOR_SIZE: int = int(os.getenv("QDRANT_VECTOR_SIZE", "512"))
+    # ============================================================
+    # ✅ CLIP 模型配置（使用 open_clip 兼容格式：连字符）
+    # ============================================================
+    # open_clip 期望格式: ViT-B-32, ViT-B-16, RN50, RN101
+    # HuggingFace 格式 (ViT-B/32) 不兼容！
+    CLIP_MODEL_NAME: str = os.getenv("CLIP_MODEL_NAME", "ViT-B-32")
+    CLIP_PRETRAINED: str = os.getenv("CLIP_PRETRAINED", "laion2b_s34b_b79k")
+    # ============================================================
+    # OneBound 爬虫 API（淘宝/电商数据抓取）
+    # ============================================================
+    ONEBOUND_API_KEY: str = os.getenv("ONEBOUND_API_KEY", "")
+    ONEBOUND_API_SECRET: str = os.getenv("ONEBOUND_API_SECRET", "")
+    ONEBOUND_BASE_URL: str = os.getenv("ONEBOUND_BASE_URL", "https://api.onebound.cn/taobao")
+    # 爬虫缓存有效期（秒），默认 24 小时
+    CRAWL_CACHE_TTL: int = int(os.getenv("CRAWL_CACHE_TTL", "86400"))
+    # AI 历史数据估算最少记录数阈值
+    HISTORY_ESTIMATE_MIN_RECORDS: int = int(os.getenv("HISTORY_ESTIMATE_MIN_RECORDS", "3"))
+    # AI 估算历史月数
+    HISTORY_ESTIMATE_MONTHS: int = int(os.getenv("HISTORY_ESTIMATE_MONTHS", "6"))
+    # ============================================================
+    # 服务器配置
+    # ============================================================
+    BASE_URL: str = os.getenv("BASE_URL", "http://localhost:8000")
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+    STATIC_PREFIX: str = os.getenv("STATIC_PREFIX", "/static")
+------------------------------------------------------------------------
+第 8 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 9 / 60 页
+------------------------------------------------------------------------
+    # ============================================================
+    # 后台任务配置
+    # ============================================================
+    BACKGROUND_TASK_RETRIES: int = int(os.getenv("BACKGROUND_TASK_RETRIES", "3"))
+    BACKGROUND_TASK_RETRY_DELAY: float = float(os.getenv("BACKGROUND_TASK_RETRY_DELAY", "1.0"))
+    BACKGROUND_TASK_ENABLED: bool = os.getenv("BACKGROUND_TASK_ENABLED", "true").lower() == "true"
+    ERROR_DATA_DIR: str = os.getenv("ERROR_DATA_DIR", "data/error_data")
+    # ============================================================
+    # 日志与运行环境
+    # ============================================================
+    ENV: str = os.getenv("ENV", "development")
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    # ============================================================
+    # CORS 配置
+    # ============================================================
+    @property
+    def ALLOWED_ORIGINS(self) -> list:
+        origins_str = os.getenv("ALLOWED_ORIGINS", "")
+        if origins_str:
+            return [origin.strip() for origin in origins_str.split(",") if origin.strip()]
+        if self.ENV == "development":
+            return [
+                "http://localhost:5173",
+                "http://localhost:3000",
+                "http://localhost:8080",
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:8080",
+            ]
+        return ["https://yourdomain.com", "https://www.yourdomain.com"]
+settings = Settings()
+# ============================================================
+# 确保必要的目录存在
+# ============================================================
+def ensure_directories():
+    """确保所有必要的目录存在"""
+    # 模型目录
+    settings.MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    # 上传目录
+    upload_path = settings.BASE_DIR / settings.UPLOAD_DIR
+    upload_path.mkdir(parents=True, exist_ok=True)
+    for subdir in ["raw", "bg_removed", "annotated"]:
+        (upload_path / subdir).mkdir(parents=True, exist_ok=True)
+    # 数据目录
+    data_dir = settings.BASE_DIR / "data"
+    for subdir in ["error_data", "faiss_index", "crawler_data", "hard_cases", "qdrant"]:
+        (data_dir / subdir).mkdir(parents=True, exist_ok=True)
+    # 错误数据目录
+    error_data_dir = settings.BASE_DIR / settings.ERROR_DATA_DIR
+------------------------------------------------------------------------
+第 9 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 10 / 60 页
+------------------------------------------------------------------------
+    for subdir in ["images", "labels", "metadata"]:
+        (error_data_dir / subdir).mkdir(parents=True, exist_ok=True)
+ensure_directories()
+# ============================================================
+# URL 工具函数
+# ============================================================
+def get_base_url(request: Optional[Request] = None) -> str:
+    """
+    获取服务器基础URL
+    Args:
+        request: FastAPI Request 对象（可选）
+    Returns:
+        str: 基础URL
+    优先级：
+    1. 从请求头 X-Forwarded-Proto 和 Host 推断
+    2. 从 request 对象推断
+    3. 从配置文件读取 BASE_URL
+    """
+    if request is not None:
+        forwarded_proto = request.headers.get("X-Forwarded-Proto")
+        forwarded_host = request.headers.get("X-Forwarded-Host")
+        if forwarded_proto and forwarded_host:
+            return f"{forwarded_proto}://{forwarded_host}"
+        return f"{request.url.scheme}://{request.url.netloc}"
+    return settings.BASE_URL
+def build_full_url(
+    relative_path: str,
+    request: Optional[Request] = None,
+    base_url: Optional[str] = None,
+) -> str:
+    """
+    构建完整的 URL
+    """
+    if not relative_path:
+        return ""
+    if relative_path.startswith("http://") or relative_path.startswith("https://"):
+        return relative_path
+    if base_url is None:
+        base_url = get_base_url(request)
+    if not relative_path.startswith("/"):
+        relative_path = "/" + relative_path
+    return f"{base_url}{relative_path}"
+def get_static_url(
+    file_path: str,
+    request: Optional[Request] = None,
+) -> str:
+    """
+    获取静态文件的完整URL
+    """
+    if not file_path:
+------------------------------------------------------------------------
+第 10 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 11 / 60 页
+------------------------------------------------------------------------
+        return ""
+    if file_path.startswith("http://") or file_path.startswith("https://"):
+        return file_path
+    if file_path.startswith("/"):
+        file_path = file_path[1:]
+    return build_full_url(f"/{settings.STATIC_PREFIX}/{file_path}", request)
+# ============================================================
+# 便捷函数
+# ============================================================
+def get_model_path(model_type: str = "yolo") -> Path:
+    """获取模型路径"""
+    if model_type == "defect":
+        return Path(settings.DEFECT_MODEL_PATH)
+    return Path(settings.YOLO_MODEL_PATH)
+def is_production() -> bool:
+    """是否为生产环境"""
+    return settings.ENV == "production"
+def is_development() -> bool:
+    """是否为开发环境"""
+    return settings.ENV == "development"
+def get_error_data_dir() -> Path:
+    """获取错误数据目录"""
+    return settings.BASE_DIR / settings.ERROR_DATA_DIR
+def get_qdrant_data_dir() -> Path:
+    """获取 Qdrant 数据目录"""
+    return settings.BASE_DIR / "data" / "qdrant"
+# ============================================================
+# ✅ CLIP 相关便捷函数
+# ============================================================
+def get_clip_model_name() -> str:
+    """
+    获取 CLIP 模型名称（确保格式兼容 open_clip）
+    Returns:
+        str: 模型名称，如 "ViT-B-32"
+    """
+    model_name = settings.CLIP_MODEL_NAME
+    # ✅ 自动转换 HuggingFace 格式 (ViT-B/32 → ViT-B-32)
+    if '/' in model_name:
+        converted = model_name.replace('/', '-')
+        logger.warning(f"⚠️ CLIP 模型名称 '{model_name}' 包含 '/'，自动转换为 '{converted}'")
+        return converted
+    return model_name
+def get_clip_pretrained() -> str:
+    """获取 CLIP 预训练权重名称"""
+    return settings.CLIP_PRETRAINED
+# ============================================================
+# 配置验证
+# ============================================================
+def validate_config() -> list:
+    """
+------------------------------------------------------------------------
+第 11 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 12 / 60 页
+------------------------------------------------------------------------
+    验证配置是否正确
+    Returns:
+        list: 错误列表（空表示全部正确）
+    """
+    errors = []
+    # API Key 验证
+    if not settings.DEEPSEEK_API_KEY:
+        errors.append("❌ DEEPSEEK_API_KEY 未配置")
+    if not settings.DASHSCOPE_API_KEY:
+        errors.append("❌ DASHSCOPE_API_KEY 未配置")
+    # 数据库验证
+    if not settings.DB_HOST:
+        errors.append("❌ DB_HOST 未配置")
+    if not settings.DB_NAME:
+        errors.append("❌ DB_NAME 未配置")
+    # 模型文件验证（仅警告，不阻止启动）
+    if not Path(settings.YOLO_MODEL_PATH).exists():
+        errors.append(f"⚠️ YOLO_MODEL_PATH 不存在: {settings.YOLO_MODEL_PATH}")
+    if not Path(settings.DEFECT_MODEL_PATH).exists():
+        errors.append(f"⚠️ DEFECT_MODEL_PATH 不存在: {settings.DEFECT_MODEL_PATH}")
+    # ✅ CLIP 模型名称验证
+    clip_name = settings.CLIP_MODEL_NAME
+    valid_clip_formats = ['ViT-B-32', 'ViT-B-16', 'ViT-L-14', 'RN50', 'RN101', 'RN50x4']
+    if clip_name not in valid_clip_formats and '/' not in clip_name:
+        errors.append(f"⚠️ CLIP_MODEL_NAME '{clip_name}' 可能不被 open_clip 支持")
+    # JWT 密钥验证（所有环境）
+    if settings.SECRET_KEY == "your-secret-key-change-in-production":
+        if is_production():
+            errors.append("❌ 生产环境 SECRET_KEY 使用默认值，请修改！")
+        else:
+            errors.append("⚠️ 开发环境 SECRET_KEY 使用默认占位符，JWT 令牌可被伪造！请设置环境变量 SECRET_KEY")
+    # 生产环境特殊验证
+    if is_production():
+        if "localhost" in settings.ALLOWED_ORIGINS:
+            errors.append("⚠️ 生产环境 ALLOWED_ORIGINS 包含 localhost")
+    return errors
+def check_config():
+    """检查配置并打印结果"""
+    errors = validate_config()
+    if errors:
+        logger.warning("=" * 70)
+        logger.warning("⚠️ 配置验证发现以下问题:")
+        logger.warning("=" * 70)
+        for err in errors:
+            logger.warning(f"  {err}")
+        logger.warning("=" * 70)
+        return False
+    else:
+        logger.info("✅ 配置验证通过")
+        return True
+------------------------------------------------------------------------
+第 12 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 13 / 60 页
+------------------------------------------------------------------------
+# ============================================================
+# 打印配置信息
+# ============================================================
+def print_config():
+    """打印当前配置（隐藏敏感信息）"""
+    lines = [
+        "=" * 70,
+        "📋 项目配置信息",
+        "=" * 70,
+        "",
+        "🔧 运行环境:",
+        f"  ENV: {settings.ENV}",
+        f"  DEBUG: {settings.DEBUG}",
+        f"  LOG_LEVEL: {settings.LOG_LEVEL}",
+        "",
+        "🌐 服务器:",
+        f"  BASE_URL: {settings.BASE_URL}",
+        f"  STATIC_PREFIX: {settings.STATIC_PREFIX}",
+        "",
+        "💾 数据库:",
+        f"  DB_HOST: {settings.DB_HOST}:{settings.DB_PORT}",
+        f"  DB_NAME: {settings.DB_NAME}",
+        "",
+        "📁 ML 模型:",
+        f"  MODELS_DIR: {settings.MODELS_DIR}",
+        f"  YOLO_MODEL_PATH: {settings.YOLO_MODEL_PATH}",
+        f"  DEFECT_MODEL_PATH: {settings.DEFECT_MODEL_PATH}",
+        "",
+        "🔍 Qdrant:",
+        f"  QDRANT_HOST: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}",
+        f"  QDRANT_COLLECTION: {settings.QDRANT_COLLECTION}",
+        "",
+        "🔐 JWT:",
+        f"  ALGORITHM: {settings.ALGORITHM}",
+        f"  ACCESS_TOKEN_EXPIRE_MINUTES: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}",
+        f"  SECRET_KEY: {'*' * 20}（已隐藏）",
+        "",
+        "🌍 CORS:",
+        f"  ALLOWED_ORIGINS: {settings.ALLOWED_ORIGINS}",
+        "",
+        "🧠 CLIP 模型:",
+        f"  CLIP_MODEL_NAME: {settings.CLIP_MODEL_NAME}",
+        f"  CLIP_PRETRAINED: {settings.CLIP_PRETRAINED}",
+        f"  → open_clip 兼容名称: {get_clip_model_name()}",
+        "=" * 70,
+    ]
+    for line in lines:
+        logger.info(line)
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+------------------------------------------------------------------------
+第 13 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 14 / 60 页
+------------------------------------------------------------------------
+    print_config()
+    print("\n")
+    check_config()
+"""
+FastAPI 依赖项 —— JWT 认证
+"""
+from typing import Optional
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.auth.jwt_handler import get_user_id_from_token
+from app.db import crud
+# ============================================================
+# ✅ 创建两个安全实例
+# ============================================================
+# 强制认证：缺少 token 时自动返回 401
+security = HTTPBearer()
+# ✅ 可选认证：缺少 token 时返回 None，不抛出异常
+security_optional = HTTPBearer(auto_error=False)
+# ============================================================
+# 强制认证依赖
+# ============================================================
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> int:
+    """
+    获取当前登录用户的 ID（强制认证）
+    所有需要认证的接口都应该使用此依赖项
+    Returns:
+        int: 当前用户 ID
+    Raises:
+        HTTPException: 401 未认证或无效 Token
+    """
+    token = credentials.credentials
+    user_id = get_user_id_from_token(token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证凭证",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # ✅ 验证用户仍存在于数据库中（主键查询，性能影响极小）
+    # 防止已删除/禁用的用户继续使用未过期的 JWT
+    user = await crud.get_user_by_id(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在或已被删除",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user_id
+------------------------------------------------------------------------
+第 14 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 15 / 60 页
+------------------------------------------------------------------------
+# ============================================================
+# 可选认证依赖
+# ============================================================
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional)
+) -> Optional[int]:
+    """
+    获取当前登录用户的 ID（可选认证）
+    用于商城、价格查询等不需要强制登录的接口
+    Returns:
+        Optional[int]: 用户 ID，未登录时返回 None
+    Note:
+        使用 auto_error=False 的 HTTPBearer 实例，
+        没有 token 时 credentials 为 None，不会抛出异常
+    """
+    # ✅ 现在可以正常处理 credentials 为 None 的情况
+    if credentials is None:
+        return None
+    token = credentials.credentials
+    user_id = get_user_id_from_token(token)
+    if user_id is None:
+        return None
+    # ✅ 修复：移除冗余 DB 查询，JWT 已验证即可信任
+    return user_id
+# ============================================================
+# 管理员权限依赖
+# ============================================================
+async def get_current_admin(
+    user_id: int = Depends(get_current_user)
+) -> int:
+    """
+    获取当前管理员用户的 ID（强制认证 + 权限检查）
+    所有管理员专用接口都应该使用此依赖项
+    Returns:
+        int: 当前管理员用户 ID
+    Raises:
+        HTTPException: 403 权限不足（非管理员）
+    """
+    role = await crud.get_user_role(user_id)
+    if role != 'admin':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足：仅管理员可访问此接口",
+        )
+    return user_id
+"""
+认证模块
+"""
+from app.auth.jwt_handler import (
+    create_access_token,
+------------------------------------------------------------------------
+第 15 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 16 / 60 页
+------------------------------------------------------------------------
+    decode_access_token,
+    get_user_id_from_token,
+    verify_password,
+    hash_password,
+)
+__all__ = [
+    'create_access_token',
+    'decode_access_token',
+    'get_user_id_from_token',
+    'verify_password',
+    'hash_password',
+]
+"""
+JWT 认证处理器
+"""
+import os
+import hashlib
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Dict, Any
+from jose import JWTError, jwt
+from app.config import settings
+# ============================================================
+# 密码哈希（PBKDF2，与 crud.py 一致）
+# ============================================================
+# ✅ 修复：OWASP 2026 建议 PBKDF2-SHA256 至少 600,000 次迭代
+_PBKDF2_ITERATIONS = 600_000
+_OLD_ITERATIONS = 100_000
+def hash_password(password: str, iterations: int = _PBKDF2_ITERATIONS) -> str:
+    """
+    PBKDF2 哈希密码
+    Args:
+        password: 明文密码
+        iterations: 迭代次数（默认 600,000）
+    Returns:
+        str: salt:hash 格式
+    """
+    salt = os.urandom(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return salt.hex() + ":" + h.hex()
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    验证密码（兼容旧哈希）
+    Args:
+        plain_password: 明文密码
+        hashed_password: 哈希密码 (salt:hash)
+    Returns:
+        bool: 是否匹配
+    """
+    try:
+        salt_hex, hash_hex = hashed_password.split(":", 1)
+------------------------------------------------------------------------
+第 16 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 17 / 60 页
+------------------------------------------------------------------------
+        salt = bytes.fromhex(salt_hex)
+        # 先用新迭代数试
+        h = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt, _PBKDF2_ITERATIONS)
+        if h.hex() == hash_hex:
+            return True
+        # 兼容旧数据
+        h = hashlib.pbkdf2_hmac("sha256", plain_password.encode(), salt, _OLD_ITERATIONS)
+        return h.hex() == hash_hex
+    except (ValueError, AttributeError):
+        return False
+# ============================================================
+# JWT Token 创建与解析
+# ============================================================
+def create_access_token(
+    data: Dict[str, Any],
+    expires_delta: Optional[timedelta] = None
+) -> str:
+    """
+    创建 JWT Token
+    Args:
+        data: 要编码的数据（必须包含 sub 字段；建议包含 role 字段）
+    Returns:
+        str: JWT Token
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
+    # ✅ 添加标准 JWT claims：iat（签发时间）、exp（过期时间）
+    now = datetime.now(timezone.utc)
+    to_encode.update({
+        "iat": now,
+        "exp": expire,
+    })
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
+    return encoded_jwt
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    解码 JWT Token
+    Args:
+        token: JWT Token
+    Returns:
+        Optional[Dict]: 解码后的数据，失败返回 None
+------------------------------------------------------------------------
+第 17 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 18 / 60 页
+------------------------------------------------------------------------
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
+        )
+        return payload
+    except JWTError:
+        return None
+def get_user_id_from_token(token: str) -> Optional[int]:
+    """
+    从 Token 中获取用户 ID
+    Args:
+        token: JWT Token
+    Returns:
+        Optional[int]: 用户 ID，失败返回 None
+    """
+    payload = decode_access_token(token)
+    if payload:
+        user_id = payload.get("sub")
+        if user_id:
+            try:
+                return int(user_id)
+            except (ValueError, TypeError):
+                return None
+    return None
+def get_username_from_token(token: str) -> Optional[str]:
+    """
+    从 Token 中获取用户名
+    Args:
+        token: JWT Token
+    Returns:
+        Optional[str]: 用户名，失败返回 None
+    """
+    payload = decode_access_token(token)
+    if payload:
+        return payload.get("username")
+    return None
+"""MySQL 连接池管理（基于 aiomysql）"""
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from typing import Optional, AsyncGenerator
+import aiomysql
+from app.config import settings
+logger = logging.getLogger(__name__)
+# ============================================================
+# 全局变量（线程安全）
+# ============================================================
+------------------------------------------------------------------------
+第 18 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 19 / 60 页
+------------------------------------------------------------------------
+_pool: Optional[aiomysql.Pool] = None
+_pool_lock: asyncio.Lock = asyncio.Lock()
+# ============================================================
+# 连接池管理
+# ============================================================
+async def get_pool() -> aiomysql.Pool:
+    """
+    获取数据库连接池（单例）
+    使用 asyncio.Lock 确保并发环境下只创建一个连接池
+    """
+    global _pool
+    # ✅ 快速路径：如果已存在，直接返回（无锁）
+    if _pool is not None:
+        return _pool
+    # ✅ 慢速路径：使用锁确保只有一个协程创建连接池
+    async with _pool_lock:
+        # ✅ 双重检查：获取锁后再次检查（防止其他协程已创建）
+        if _pool is not None:
+            return _pool
+        logger.info("📦 创建 MySQL 连接池...")
+        try:
+            _pool = await aiomysql.create_pool(
+                host=settings.DB_HOST,
+                port=settings.DB_PORT,
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                db=settings.DB_NAME,
+                charset="utf8mb4",
+                autocommit=True,
+                minsize=2,
+                maxsize=20,  # ✅ 修复：提高连接池大小，支持更高并发
+                pool_recycle=3600,      # 连接回收时间（秒）
+                connect_timeout=10,     # 连接超时
+                echo=False,             # 不打印 SQL 日志
+            )
+            logger.info(f"✅ MySQL 连接池创建成功: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
+            return _pool
+        except Exception as e:
+            logger.error(f"❌ MySQL 连接池创建失败: {e}")
+            raise
+async def close_pool() -> None:
+    """
+    关闭数据库连接池（应用关闭时调用）
+    """
+    global _pool
+    # ✅ 使用锁保护，防止与 get_pool() 竞争
+    async with _pool_lock:
+        if _pool is not None:
+            logger.info("🔄 关闭 MySQL 连接池...")
+            _pool.close()
+------------------------------------------------------------------------
+第 19 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 20 / 60 页
+------------------------------------------------------------------------
+            await _pool.wait_closed()
+            _pool = None
+            logger.info("✅ MySQL 连接池已关闭")
+@asynccontextmanager
+async def get_connection() -> AsyncGenerator[aiomysql.Connection, None]:
+    """
+    获取数据库连接的上下文管理器
+    使用方式:
+        async with get_connection() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT 1")
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        yield conn
+async def health_check() -> bool:
+    """
+    检查数据库连接是否正常
+    Returns:
+        bool: 连接正常返回 True
+    """
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await asyncio.wait_for(cur.execute("SELECT 1"), timeout=5.0)
+                await asyncio.wait_for(cur.fetchone(), timeout=5.0)
+        logger.debug("✅ 数据库健康检查通过")
+        return True
+    except Exception as e:
+        logger.error(f"❌ 数据库健康检查失败: {e}")
+        return False
+async def reset_pool() -> None:
+    """
+    重置连接池（用于测试）
+    """
+    global _pool
+    async with _pool_lock:
+        if _pool is not None:
+            _pool.close()
+            await _pool.wait_closed()
+            _pool = None
+            logger.info("🔄 MySQL 连接池已重置")
+# ============================================================
+# 应用生命周期管理
+# ============================================================
+async def init_db() -> None:
+    """初始化数据库连接池（应用启动时调用）"""
+    await get_pool()
+async def shutdown_db() -> None:
+------------------------------------------------------------------------
+第 20 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 21 / 60 页
+------------------------------------------------------------------------
+    """关闭数据库连接池（应用关闭时调用）"""
+    await close_pool()
+"""数据库 CRUD 操作"""
+import json
+import logging
+from difflib import SequenceMatcher
+from typing import Optional, List, Dict, Any
+import aiomysql
+from app.db.connection import get_pool
+from app.utils.json_utils import safe_json_dumps
+logger = logging.getLogger(__name__)
+# ============================================================
+# users — 用户管理
+# ============================================================
+import hashlib
+import os
+# ✅ 修复：OWASP 2026 PBKDF2-SHA256 至少 600,000 次迭代
+_PBKDF2_ITERATIONS = 600_000
+# 保留旧迭代数用于兼容旧密码
+_OLD_ITERATIONS = 100_000
+def _hash_password(password: str) -> str:
+    """PBKDF2 哈希密码"""
+    salt = os.urandom(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
+    return salt.hex() + ":" + h.hex()
+def _verify_password(password: str, stored: str) -> bool:
+    """验证密码（兼容旧哈希：先试新迭代数，再试旧的）"""
+    try:
+        salt_hex, hash_hex = stored.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        # 先用新迭代数试
+        h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
+        if h.hex() == hash_hex:
+            return True
+        # 兼容旧数据：用旧的 10 万次迭代
+        h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _OLD_ITERATIONS)
+        return h.hex() == hash_hex
+    except (ValueError, AttributeError):
+        return False
+async def register_user(username: str, password: str, role: str = "user") -> tuple[bool, int | None, str]:
+    """注册用户。返回 (success, user_id, message)"""
+    if role not in ('user', 'admin'):
+        role = 'user'
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute("SELECT id FROM users WHERE username=%s", (username,))
+            if await cur.fetchone():
+                return False, None, "用户名已被占用"
+            pw_hash = _hash_password(password)
+------------------------------------------------------------------------
+第 21 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 22 / 60 页
+------------------------------------------------------------------------
+            await cur.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
+                (username, pw_hash, role),
+            )
+            return True, cur.lastrowid, "注册成功"
+async def get_user_by_id(user_id: int) -> dict | None:
+    """根据ID获取用户信息"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT id, username, created_at FROM users WHERE id = %s",
+                (user_id,)
+            )
+            return await cur.fetchone()
+async def authenticate_user(username: str, password: str) -> tuple[bool, int | None, str, str]:
+    """登录鉴权。返回 (success, user_id, message, role)"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT id, password_hash, role, status FROM users WHERE username=%s",
+                (username,),
+            )
+            row = await cur.fetchone()
+            if not row:
+                return False, None, "用户不存在", "user"
+            if row.get('status') == 'disabled':
+                return False, None, "账号已被禁用，请联系管理员", "user"
+            if not _verify_password(password, row["password_hash"]):
+                return False, None, "密码错误", "user"
+            await cur.execute(
+                "UPDATE users SET last_login = NOW() WHERE id = %s",
+                (row["id"],)
+            )
+            return True, row["id"], "登录成功", row.get("role", "user")
+# ============================================================
+# market_prices — 行情查询
+# ============================================================
+async def query_price(brand: str, model: str) -> dict | None:
+    """三层匹配策略查询行情"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                "SELECT category, brand, model, avg_price, low_price, high_price, updated_at "
+                "FROM market_prices WHERE brand=%s AND model=%s",
+                (brand, model),
+            )
+            row = await cur.fetchone()
+------------------------------------------------------------------------
+第 22 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 23 / 60 页
+------------------------------------------------------------------------
+            if row:
+                return row
+            await cur.execute(
+                "SELECT category, brand, model, avg_price, low_price, high_price, updated_at "
+                "FROM market_prices WHERE brand=%s",
+                (brand,),
+            )
+            rows = await cur.fetchall()
+            best, best_score = None, 0
+            for r in rows:
+                score = SequenceMatcher(None, model.lower(), r["model"].lower()).ratio()
+                if score > best_score:
+                    best_score, best = score, r
+            if best and best_score > 0.7:
+                return best
+            return None
+async def upsert_price(
+    brand: str, 
+    model: str, 
+    avg_price: float, 
+    low_price: float, 
+    high_price: float,
+    category: str = "",
+    data_source: str = ""
+) -> bool:
+    """
+    更新或插入价格数据（缓存）
+    Args:
+        brand: 品牌
+        model: 型号
+        avg_price: 均价
+        low_price: 最低价
+        high_price: 最高价
+        category: 品类
+        data_source: 数据来源
+    Returns:
+        bool: 是否成功
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO market_prices 
+                   (category, brand, model, avg_price, low_price, high_price, data_source, updated_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                   ON DUPLICATE KEY UPDATE 
+                   avg_price = VALUES(avg_price),
+                   low_price = VALUES(low_price),
+                   high_price = VALUES(high_price),
+                   category = COALESCE(VALUES(category), category),
+------------------------------------------------------------------------
+第 23 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 24 / 60 页
+------------------------------------------------------------------------
+                   data_source = VALUES(data_source),
+                   updated_at = NOW()""",
+                (category, brand, model, avg_price, low_price, high_price, data_source)
+            )
+            await conn.commit()
+            return True
+async def insert_price_history(
+    brand: str,
+    model: str,
+    avg_price: float,
+    low_price: float,
+    high_price: float,
+    source: str = ""
+) -> int:
+    """
+    插入价格历史记录
+    Args:
+        brand: 品牌
+        model: 型号
+        avg_price: 均价
+        low_price: 最低价
+        high_price: 最高价
+        source: 数据来源
+    Returns:
+        int: 记录ID
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO price_history 
+                   (brand, model, price, low_price, high_price, price_type, source)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (brand, model, avg_price, low_price, high_price, 'avg', source)
+            )
+            await conn.commit()
+            return cur.lastrowid
+async def get_price_history(brand: str, model: str, limit: int = 50) -> list[dict]:
+    """
+    获取价格历史记录
+    Args:
+        brand: 品牌
+        model: 型号
+        limit: 返回数量
+    Returns:
+        list[dict]: 历史记录列表
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+------------------------------------------------------------------------
+第 24 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 25 / 60 页
+------------------------------------------------------------------------
+            await cur.execute(
+                """SELECT price, low_price, high_price, source, recorded_at
+                   FROM price_history 
+                   WHERE brand = %s AND model = %s
+                   ORDER BY recorded_at DESC
+                   LIMIT %s""",
+                (brand, model, limit)
+            )
+            return await cur.fetchall()
+# ============================================================
+# published_items — 发布记录
+# ============================================================
+async def insert_published_item(
+    user_id: int,
+    image_url: str,
+    title: str,
+    desc: str,
+    price: float,
+    status: str = "published",
+    category: str = None,
+    brand: str = None,
+    model: str = None,
+    condition: str = None,
+) -> int:
+    """
+    插入发布记录
+    Args:
+        user_id: 用户ID
+        image_url: 图片URL
+        title: 标题
+        desc: 描述
+        price: 价格
+        status: 状态 (published/draft)
+        category: 品类
+        brand: 品牌
+        model: 型号
+        condition: 成色
+    Returns:
+        int: 商品ID
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """INSERT INTO published_items 
+                   (user_id, original_image_url, ai_generated_title, 
+                    ai_generated_desc, suggested_price, status, category, 
+                    brand, model, `condition`) 
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (user_id, image_url, title, desc, price, status, 
+------------------------------------------------------------------------
+第 25 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 26 / 60 页
+------------------------------------------------------------------------
+                 category, brand, model, condition)
+            )
+            return cur.lastrowid
+async def update_item_status(item_id: int, status: str, user_id: int = None):
+    """更新商品状态，可选所有权验证"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            if user_id is not None:
+                # ✅ 修复：验证所有权
+                await cur.execute(
+                    "SELECT user_id FROM published_items WHERE id = %s",
+                    (item_id,)
+                )
+                row = await cur.fetchone()
+                if not row:
+                    return False
+                if row[0] != user_id:
+                    return False
+            await cur.execute(
+                "UPDATE published_items SET status=%s WHERE id=%s",
+                (status, item_id),
+            )
+            return True
+async def get_history(user_id: int) -> list[dict]:
+    """获取用户发布历史（含 views）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """SELECT id, user_id, original_image_url, ai_generated_title,
+                          ai_generated_desc, suggested_price, status, category,
+                          brand, model, `condition`, views, created_at
+                   FROM published_items 
+                   WHERE user_id = %s 
+                   ORDER BY created_at DESC LIMIT 50""",
+                (user_id,)
+            )
+            return await cur.fetchall()
+# 排序字段白名单（防止 SQL 注入）
+_MARKET_SORT_COLUMNS = {
+    "created_at": "p.created_at",
+    "price": "p.suggested_price",
+}
+async def get_market_items(
+    keyword: str = "",
+    category: str = "",
+    condition: str = "",
+    price_min: float = None,
+    price_max: float = None,
+------------------------------------------------------------------------
+第 26 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 27 / 60 页
+------------------------------------------------------------------------
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[dict], int]:
+    """
+    获取商城商品列表（分页 + 排序 + 多维筛选）
+    Returns:
+        tuple[list[dict], int]: (商品列表, 总条数)
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            # ============================================================
+            # 构建 WHERE 子句
+            # ============================================================
+            where_parts = ["p.status = 'published'"]
+            params: list = []
+            if keyword:
+                where_parts.append(
+                    "(p.ai_generated_title LIKE %s OR p.ai_generated_desc LIKE %s)"
+                )
+                kw = f"%{keyword}%"
+                params.extend([kw, kw])
+            if category:
+                where_parts.append("p.category = %s")
+                params.append(category)
+            if condition:
+                where_parts.append("p.`condition` LIKE %s")
+                params.append(f"%{condition}%")
+            if price_min is not None:
+                where_parts.append("p.suggested_price >= %s")
+                params.append(price_min)
+            if price_max is not None:
+                where_parts.append("p.suggested_price <= %s")
+                params.append(price_max)
+            where_clause = " AND ".join(where_parts)
+            # ============================================================
+            # COUNT 查询
+            # ============================================================
+            count_sql = (
+                "SELECT COUNT(*) AS total FROM published_items p "
+                "JOIN users u ON p.user_id = u.id "
+                f"WHERE {where_clause}"
+            )
+            await cur.execute(count_sql, params)
+            total_row = await cur.fetchone()
+            total = total_row["total"] if total_row else 0
+            # ============================================================
+            # 排序（白名单映射防注入）
+------------------------------------------------------------------------
+第 27 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 28 / 60 页
+------------------------------------------------------------------------
+            # ============================================================
+            sort_col = _MARKET_SORT_COLUMNS.get(sort_by, "p.created_at")
+            order_dir = "DESC" if sort_order.lower() == "desc" else "ASC"
+            # 价格排序时：NULL 值排最后
+            if sort_by == "price":
+                null_pos = "DESC" if order_dir == "ASC" else "ASC"
+                order_clause = (
+                    f"ORDER BY CASE WHEN p.suggested_price IS NULL THEN 1 ELSE 0 END {null_pos}, "
+                    f"{sort_col} {order_dir}"
+                )
+            else:
+                order_clause = f"ORDER BY {sort_col} {order_dir}"
+            # ============================================================
+            # 数据查询（分页）
+            # ============================================================
+            offset = (page - 1) * page_size
+            data_sql = (
+                "SELECT p.id, p.user_id, u.username, p.original_image_url, "
+                "p.ai_generated_title, p.ai_generated_desc, p.suggested_price, "
+                "p.category, p.brand, p.model, p.`condition`, "
+                "p.views, p.created_at "
+                "FROM published_items p "
+                "JOIN users u ON p.user_id = u.id "
+                f"WHERE {where_clause} "
+                f"{order_clause} "
+                "LIMIT %s OFFSET %s"
+            )
+            await cur.execute(data_sql, params + [page_size, offset])
+            items = await cur.fetchall()
+            return items, total
+# ============================================================
+# published_items — 瑕疵数据更新
+# ============================================================
+async def update_item_defects(
+    item_id: int,
+    bg_removed_url: str = None,
+    annotated_url: str = None,
+    defect_count: int = 0,
+    defect_data: list = None
+):
+    """
+    更新商品的瑕疵信息
+    Args:
+        item_id: 商品ID
+        bg_removed_url: 去背景图URL
+        annotated_url: 标注图URL
+        defect_count: 瑕疵数量
+        defect_data: 瑕疵详细数据列表（含程度信息）
+    """
+    pool = await get_pool()
+------------------------------------------------------------------------
+第 28 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 29 / 60 页
+------------------------------------------------------------------------
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            # ✅ 使用 safe_json_dumps 替代直接 json.dumps
+            defect_json = safe_json_dumps(defect_data)
+            await cur.execute(
+                """UPDATE published_items 
+                   SET bg_removed_url = COALESCE(%s, bg_removed_url),
+                       annotated_url = COALESCE(%s, annotated_url),
+                       defect_count = %s,
+                       defect_data = %s,
+                       updated_at = NOW()
+                   WHERE id = %s""",
+                (bg_removed_url, annotated_url, defect_count, defect_json, item_id)
+            )
+async def get_item_by_id(item_id: int) -> dict | None:
+    """根据ID获取商品信息（含 views）"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(
+                """SELECT id, user_id, original_image_url, bg_removed_url, annotated_url,
+                          ai_generated_title, ai_generated_desc, suggested_price,
+                          category, brand, model, `condition`, status,
+                          views, defect_count, defect_data, created_at
+                   FROM published_items WHERE id = %s""",
+                (item_id,)
+            )
+            return await cur.fetchone()
+async def get_items_by_ids(item_ids: list[int]) -> dict[int, dict]:
+    """
+    批量获取商品信息（避免 N+1 查询）
+    Args:
+        item_ids: 商品ID列表
+    Returns:
+        dict[int, dict]: {item_id: item_data} 映射
+    """
+    if not item_ids:
+        return {}
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            placeholders = ','.join(['%s'] * len(item_ids))
+            await cur.execute(
+                f"""SELECT id, user_id, original_image_url, bg_removed_url, annotated_url,
+                          ai_generated_title, ai_generated_desc, suggested_price,
+                          category, brand, model, `condition`, status,
+                          views, defect_count, defect_data, created_at
+                   FROM published_items WHERE id IN ({placeholders})""",
+                item_ids
+            )
+------------------------------------------------------------------------
+第 29 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 30 / 60 页
+------------------------------------------------------------------------
+            rows = await cur.fetchall()
+            return {row['id']: row for row in rows}
+# ============================================================
+# views 更新操作
+# ============================================================
+async def increment_views(item_id: int) -> None:
+    """增加浏览次数"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE published_items SET views = views + 1 WHERE id = %s",
+                (item_id,)
+            )
+# ============================================================
+# hard_cases — 错误数据记录（增强版，支持数据飞轮）
+# ============================================================
+async def insert_hard_case(
+    image_url: str,
+    wrong_label: str,
+    correct_label: str,
+    user_id: int,
+    item_id: int = None,
+    model_version: str = None,
+    confidence: float = 0.0
+) -> int:
+    """
+    插入错误数据到 hard_cases 表
+    支持幂等性：如果相同 image_url + wrong_label + correct_label 已存在，更新而非插入
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            # 检查是否已存在（幂等性）
+            await cur.execute(
+                """SELECT id, retry_count FROM hard_cases 
+                   WHERE image_url = %s AND wrong_label = %s AND correct_label = %s""",
+                (image_url, wrong_label, correct_label)
+            )
+            existing = await cur.fetchone()
+            if existing:
+                # 更新已有记录（增加重试计数）
+                await cur.execute(
+                    """UPDATE hard_cases 
+                       SET retry_count = retry_count + 1,
+                           updated_at = NOW()
+                       WHERE id = %s""",
+                    (existing[0],)
+                )
+                return existing[0]
+------------------------------------------------------------------------
+第 30 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 31 / 60 页
+------------------------------------------------------------------------
+}
+function clearResults() {
+  hasSearched.value = false
+  searchResults.value = []
+  searchText.value = ''
+}
+function goToMarket() {
+  router.push('/market')
+}
+function formatPrice(value) {
+  if (!value || isNaN(value)) return '0'
+  return Math.round(value).toLocaleString()
+}
+function handleImageError(event) {
+  event.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect fill="%23f5f5f5" width="400" height="300"/><text x="50%" y="50%" text-anchor="middle" fill="%23999" font-size="14">图片加载失败</text></svg>'
+}
+</script>
+<style scoped>
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>
+<template>
+  <div class="space-y-6">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div>
+        <div class="relative inline-block">
+          <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-xl -z-10"></div>
+          <h1 class="text-3xl sm:text-4xl font-bold gradient-text">发布历史</h1>
+        </div>
+        <p class="text-text-muted text-sm mt-2">查看已生成的商品发布记录</p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+        <div class="relative flex-1 sm:flex-none">
+          <input 
+            v-model="searchText" 
+            placeholder="搜索型号…"
+            class="w-full sm:w-48 px-4 py-3 pl-10 border border-border rounded-xl text-sm bg-white placeholder:text-text-muted focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:outline-none transition-all"
+            autocomplete="off"
+            aria-label="搜索型号"
+          />
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">🔍</span>
+        </div>
+        <select 
+          v-model="filterStatus" 
+          class="px-4 py-3 text-sm border border-border rounded-xl bg-white text-text-primary outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
+          aria-label="状态筛选"
+------------------------------------------------------------------------
+第 31 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 32 / 60 页
+------------------------------------------------------------------------
+        >
+          <option value="" class="bg-white">全部状态</option>
+          <option value="published" class="bg-white">已发布</option>
+          <option value="delisted" class="bg-white">已下架</option>
+          <option value="draft" class="bg-white">草稿</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div class="stat-card">
+        <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-primary-100 flex items-center justify-center">
+          <span class="text-primary-600 text-sm">📊</span>
+        </div>
+        <p class="stat-value text-text-primary">{{ items.length }}</p>
+        <p class="stat-label">全部记录</p>
+      </div>
+      <div class="stat-card">
+        <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-accent-100 flex items-center justify-center">
+          <span class="text-accent-600 text-sm">✅</span>
+        </div>
+        <p class="stat-value text-accent-600">{{ items.filter(i => i.status === 'published').length }}</p>
+        <p class="stat-label">已发布</p>
+      </div>
+      <div class="stat-card">
+        <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-warning-100 flex items-center justify-center">
+          <span class="text-warning-600 text-sm">📝</span>
+        </div>
+        <p class="stat-value text-warning-600">{{ items.filter(i => i.status === 'draft').length }}</p>
+        <p class="stat-label">草稿</p>
+      </div>
+      <div class="stat-card">
+        <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-gray-100 flex items-center justify-center">
+          <span class="text-gray-600 text-sm">📦</span>
+        </div>
+        <p class="stat-value text-text-muted">{{ items.filter(i => i.status === 'delisted').length }}</p>
+        <p class="stat-label">已下架</p>
+      </div>
+    </div>
+    <div v-if="loading" class="space-y-4">
+      <div v-for="i in 3" :key="i" class="glass-card p-5 flex gap-4 animate-pulse">
+        <div class="w-24 h-24 bg-surface-tertiary rounded-xl" />
+        <div class="flex-1 space-y-3 py-2">
+          <div class="h-5 bg-surface-tertiary rounded-lg w-3/4" />
+          <div class="h-4 bg-surface-tertiary rounded w-full" />
+          <div class="h-4 bg-surface-tertiary rounded w-1/3" />
+        </div>
+      </div>
+    </div>
+    <div v-else-if="filteredItems.length === 0 && !loading" class="text-center py-16">
+      <div class="relative inline-block mb-6">
+------------------------------------------------------------------------
+第 32 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 33 / 60 页
+------------------------------------------------------------------------
+        <div class="absolute -inset-4 bg-gradient-to-br from-primary-400/30 to-accent-400/30 rounded-2xl blur-lg -z-10"></div>
+        <div class="w-24 h-24 rounded-full bg-surface-secondary flex items-center justify-center">
+          <span class="text-5xl">📦</span>
+        </div>
+      </div>
+      <p class="text-text-secondary font-medium text-lg">还没有发布记录</p>
+      <p class="text-text-muted text-sm mt-2">去发布页生成第一条带货文案吧</p>
+      <router-link to="/" class="mt-5 inline-block btn-primary">前往发布 →</router-link>
+    </div>
+    <div v-else class="space-y-4">
+      <HistoryCard v-for="item in filteredItems" :key="item.id" :item="item" @delist="doDelist" @publish="doPublish" />
+    </div>
+  </div>
+</template>
+<script setup>
+import { ref, computed, onMounted, inject } from 'vue'
+import { useUser } from '../store/user.js'
+import HistoryCard from '../components/HistoryCard.vue'
+import { getHistory, delistItem, publishItem } from '../api/index.js'
+const toast = inject('toast', () => {})
+const { userId } = useUser()
+const items = ref([])
+const loading = ref(true)
+const filterStatus = ref('')
+const searchText = ref('')
+const filteredItems = computed(() => {
+  let list = items.value
+  if (filterStatus.value) list = list.filter(i => i.status === filterStatus.value)
+  if (searchText.value) {
+    const q = searchText.value.toLowerCase()
+    list = list.filter(i => (i.ai_generated_title || '').toLowerCase().includes(q) || (i.ai_generated_desc || '').toLowerCase().includes(q))
+  }
+  return list
+})
+async function loadHistory() {
+  try { items.value = await getHistory(userId.value) } catch (e) { console.error('加载历史失败:', e) } finally { loading.value = false }
+}
+onMounted(loadHistory)
+async function doDelist(id) {
+  try {
+    await delistItem(id)
+    toast('已下架', 'success')
+    await loadHistory()
+  } catch { toast('操作失败', 'error') }
+}
+async function doPublish(id) {
+  try {
+    await publishItem(id)
+    toast('已发布', 'success')
+    await loadHistory()
+------------------------------------------------------------------------
+第 33 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 34 / 60 页
+------------------------------------------------------------------------
+  } catch { toast('操作失败', 'error') }
+}
+</script>
+<template>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold gradient-text">消息通知</h1>
+        <p class="text-text-muted text-sm mt-1">查看平台通知和商品审核状态</p>
+      </div>
+      <button 
+        v-if="unreadCount > 0"
+        class="btn-secondary-sm"
+        @click="markAllRead"
+      >
+        全部已读
+      </button>
+    </div>
+    <div v-if="notifications.length === 0" class="glass-card text-center py-16">
+      <div class="text-6xl mb-4">📭</div>
+      <h3 class="text-lg font-semibold text-text-primary mb-2">暂无消息</h3>
+      <p class="text-text-muted">您还没有收到任何通知</p>
+    </div>
+    <div v-else class="space-y-4">
+      <div 
+        v-for="notification in notifications" 
+        :key="notification.id"
+        class="glass-card p-4 cursor-pointer transition-all"
+        :class="notification.is_read ? 'opacity-70' : 'bg-primary-50/50'"
+        @click="markAsRead(notification.id)"
+      >
+        <div class="flex gap-4">
+          <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl"
+            :class="getIconBgClass(notification.type)">
+            {{ getIcon(notification.type) }}
+          </div>
+          <div class="flex-1">
+            <div class="flex items-start justify-between">
+              <div>
+                <h3 class="font-semibold text-text-primary">{{ notification.title }}</h3>
+                <p class="text-sm text-text-secondary mt-1">{{ notification.message }}</p>
+              </div>
+              <span v-if="!notification.is_read" class="w-2 h-2 bg-primary-500 rounded-full mt-2"></span>
+            </div>
+            <div class="flex items-center gap-4 mt-2 text-xs text-text-muted">
+              <span>{{ formatDate(notification.created_at) }}</span>
+              <span v-if="notification.item_id" class="badge badge-primary">商品ID: {{ notification.item_id }}</span>
+            </div>
+          </div>
+        </div>
+------------------------------------------------------------------------
+第 34 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 35 / 60 页
+------------------------------------------------------------------------
+      </div>
+    </div>
+  </div>
+</template>
+<script setup>
+import { ref, onMounted, computed } from 'vue'
+import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api/index.js'
+const notifications = ref([])
+const unreadCount = computed(() => {
+  return notifications.value.filter(n => !n.is_read).length
+})
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
+function getIcon(type) {
+  switch (type) {
+    case 'force_delisted': return '⚠️'
+    case 'review_required': return '🔍'
+    case 'system': return '📢'
+    default: return '📩'
+  }
+}
+function getIconBgClass(type) {
+  switch (type) {
+    case 'force_delisted': return 'bg-danger-100'
+    case 'review_required': return 'bg-warning-100'
+    case 'system': return 'bg-primary-100'
+    default: return 'bg-surface-secondary'
+  }
+}
+async function loadNotifications() {
+  try {
+    const result = await getNotifications()
+    notifications.value = result.notifications || []
+  } catch (e) {
+    console.error('加载通知失败:', e)
+  }
+}
+async function markAsRead(id) {
+  try {
+    await markNotificationRead(id)
+    const notification = notifications.value.find(n => n.id === id)
+    if (notification) {
+      notification.is_read = true
+    }
+  } catch (e) {
+    console.error('标记已读失败:', e)
+  }
+}
+------------------------------------------------------------------------
+第 35 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 36 / 60 页
+------------------------------------------------------------------------
+async function markAllRead() {
+  try {
+    await markAllNotificationsRead()
+    notifications.value.forEach(n => n.is_read = true)
+  } catch (e) {
+    console.error('全部已读失败:', e)
+  }
+}
+onMounted(() => {
+  loadNotifications()
+})
+</script>
+<template>
+  <div class="space-y-6">
+    <!-- 返回按钮 -->
+    <button
+      @click="$router.back()"
+      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:text-primary-600 hover:bg-primary-50 border border-border hover:border-primary-200 transition-all"
+      aria-label="返回上一页"
+    >
+      <span class="text-lg">←</span> 返回
+    </button>
+    <!-- 页面标题 -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div>
+        <div class="relative inline-block">
+          <div class="absolute -inset-4 bg-gradient-to-r from-primary-400/30 to-accent-400/30 rounded-3xl blur-xl -z-10"></div>
+          <h1 class="text-3xl sm:text-4xl font-bold gradient-text">历史价格</h1>
+        </div>
+        <p class="text-text-muted text-sm mt-2">
+          {{ priceData.brand }} {{ priceData.model }} · 过去6个月价格走势
+        </p>
+      </div>
+    </div>
+    <!-- 加载状态 -->
+    <div v-if="loading" class="glass-card p-8 text-center">
+      <div class="loading-spinner mx-auto mb-4" style="width: 40px; height: 40px; border-width: 3px;" />
+      <p class="text-text-muted">正在获取历史价格...</p>
+    </div>
+    <!-- 无数据 -->
+    <div v-else-if="!hasData" class="glass-card p-12 text-center">
+      <div class="relative inline-block mb-6">
+        <div class="absolute -inset-4 bg-gradient-to-br from-warning-400/30 to-accent-400/30 rounded-2xl blur-lg -z-10"></div>
+        <div class="w-24 h-24 rounded-full bg-surface-secondary flex items-center justify-center">
+          <span class="text-5xl">📊</span>
+        </div>
+      </div>
+      <p class="text-text-secondary font-medium text-lg">暂无价格数据</p>
+      <p class="text-text-muted text-sm mt-2">请先在发布页面确认商品信息后再查看</p>
+    </div>
+------------------------------------------------------------------------
+第 36 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 37 / 60 页
+------------------------------------------------------------------------
+    <!-- 价格分析结果 -->
+    <div v-else>
+      <!-- 统计卡片 -->
+      <div class="grid grid-cols-3 gap-4">
+        <div class="stat-card">
+          <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-accent-100 flex items-center justify-center">
+            <span class="text-accent-600 text-sm">💰</span>
+          </div>
+          <p class="stat-value text-accent-600">¥{{ formatPrice(priceData.avg_price) }}</p>
+          <p class="stat-label">平均价格</p>
+        </div>
+        <div class="stat-card">
+          <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-green-100 flex items-center justify-center">
+            <span class="text-green-600 text-sm">📉</span>
+          </div>
+          <p class="stat-value text-green-600">¥{{ formatPrice(priceData.min_price) }}</p>
+          <p class="stat-label">最低价格</p>
+        </div>
+        <div class="stat-card">
+          <div class="w-8 h-8 mx-auto mb-2 rounded-lg bg-red-100 flex items-center justify-center">
+            <span class="text-red-600 text-sm">📈</span>
+          </div>
+          <p class="stat-value text-red-600">¥{{ formatPrice(priceData.max_price) }}</p>
+          <p class="stat-label">最高价格</p>
+        </div>
+      </div>
+      <!-- 价格趋势图表 -->
+      <div class="glass-card p-6">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-xl font-bold text-text-primary">{{ priceData.brand }} {{ priceData.model }}</h2>
+            <p class="text-sm text-text-muted mt-1">价格趋势曲线（过去6个月 · {{ chartPoints.length }}个数据点）</p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              :class="chartView === 'line' ? 'bg-primary-100 text-primary-700' : 'bg-surface-secondary text-text-secondary hover:bg-primary-50'"
+              @click="chartView = 'line'"
+            >
+              趋势图
+            </button>
+            <button
+              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              :class="chartView === 'bar' ? 'bg-primary-100 text-primary-700' : 'bg-surface-secondary text-text-secondary hover:bg-primary-50'"
+              @click="chartView = 'bar'"
+            >
+              柱状图
+            </button>
+          </div>
+        </div>
+------------------------------------------------------------------------
+第 37 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 38 / 60 页
+------------------------------------------------------------------------
+        <!-- SVG 图表 -->
+        <div class="relative" style="height: 420px;">
+          <svg
+            :viewBox="`0 0 ${chartWidth} ${chartHeight}`"
+            class="w-full h-full"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            <defs>
+              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.25" />
+                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.02" />
+              </linearGradient>
+              <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#a78bfa" stop-opacity="0.9" />
+                <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.5" />
+              </linearGradient>
+              <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#7c3aed" />
+                <stop offset="50%" stop-color="#8b5cf6" />
+                <stop offset="100%" stop-color="#a78bfa" />
+              </linearGradient>
+            </defs>
+            <!-- 网格线 -->
+            <g>
+              <line v-for="(tick, i) in yTicks" :key="'h-' + i"
+                :x1="pad.l" :y1="yPos(tick.value)" :x2="chartWidth - pad.r" :y2="yPos(tick.value)"
+                stroke="#e4e4e7" stroke-width="1" stroke-dasharray="4,4" />
+            </g>
+            <!-- Y轴 -->
+            <g>
+              <text v-for="(tick, i) in yTicks" :key="'yl-' + i"
+                :x="pad.l - 8" :y="yPos(tick.value) + 4"
+                text-anchor="end" class="axis-label">¥{{ formatPrice(tick.value) }}</text>
+            </g>
+            <!-- X轴 -->
+            <g>
+              <text v-for="(tick, i) in xTicks" :key="'xl-' + i"
+                :x="xPos(tick.index)" :y="chartHeight - pad.b + 18"
+                text-anchor="middle" class="axis-label">{{ tick.label }}</text>
+            </g>
+            <!-- 柱状图 -->
+            <g v-if="chartView === 'bar'">
+              <rect v-for="(pt, i) in chartPoints" :key="'bar-' + i"
+                :x="barX(i)" :y="yPos(pt.price)"
+                :width="barW" :height="yPos(baseline) - yPos(pt.price)"
+                :fill="barColor(pt.price)"
+                rx="1"
+                class="bar-rect"
+                @mouseenter="hovered = pt; hoverIdx = i"
+                @mouseleave="hovered = null" />
+------------------------------------------------------------------------
+第 38 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 39 / 60 页
+------------------------------------------------------------------------
+            </g>
+            <!-- 折线图-填充 -->
+            <path v-if="chartView === 'line'" :d="areaPath" fill="url(#areaGrad)" />
+            <!-- 折线图-曲线 -->
+            <path v-if="chartView === 'line'" :d="smoothPath"
+              fill="none" stroke="url(#lineGrad)"
+              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <!-- 数据点 -->
+            <g v-if="chartView === 'line'">
+              <circle v-for="(pt, i) in chartPoints" :key="'pt-' + i"
+                :cx="xPos(i)" :cy="yPos(pt.price)"
+                :r="hoverIdx === i ? 5 : (i % 15 === 0 ? 3 : 0)"
+                :fill="hoverIdx === i ? '#8b5cf6' : '#fff'"
+                :stroke="hoverIdx === i ? '#7c3aed' : '#a78bfa'"
+                :stroke-width="hoverIdx === i ? 2.5 : 1.5"
+                class="data-point"
+                @mouseenter="hovered = pt; hoverIdx = i"
+                @mouseleave="hovered = null" />
+            </g>
+            <!-- Tooltip -->
+            <g v-if="hovered" :transform="`translate(${tooltipX}, ${tooltipY})`">
+              <rect x="-70" y="-48" width="140" height="42" rx="8"
+                fill="rgba(24,24,27,0.92)" stroke="#8b5cf6" stroke-width="1" />
+              <text x="0" y="-26" text-anchor="middle" fill="#fff" font-size="11">{{ hovered.date }}</text>
+              <text x="0" y="-6" text-anchor="middle" fill="#c4b5fd" font-size="13" font-weight="bold">¥{{ formatPrice(hovered.price) }}</text>
+            </g>
+          </svg>
+        </div>
+        <!-- 图例 -->
+        <div class="flex items-center justify-center gap-6 mt-4 text-xs text-text-muted">
+          <div class="flex items-center gap-1.5">
+            <div class="w-4 h-0.5 rounded" style="background: #8b5cf6"></div>
+            <span>价格走势</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div class="w-2.5 h-2.5 rounded-full border" style="border-color: #a78bfa; background: #fff"></div>
+            <span>数据采样点</span>
+          </div>
+        </div>
+        <!-- 价格区间 -->
+        <div class="mt-6 pt-6 border-t border-border">
+          <div class="flex items-center gap-4">
+            <span class="text-sm text-text-muted flex-shrink-0">价格区间</span>
+            <div class="flex-1 relative h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div class="absolute top-0 bottom-0 bg-gradient-to-r from-green-400 via-yellow-400 to-red-400 rounded-full" style="width: 100%" />
+              <div class="absolute top-1/2 -translate-y-1/2 bg-white border-2 border-primary-500 rounded-full w-4 h-4 shadow-md"
+                :style="{ left: avgPosition + '%' }" />
+            </div>
+          </div>
+          <div class="flex justify-between mt-2 text-xs text-text-muted">
+------------------------------------------------------------------------
+第 39 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 40 / 60 页
+------------------------------------------------------------------------
+            <span>¥{{ formatPrice(priceData.min_price) }}</span>
+            <span class="text-primary-600 font-medium">均价 ¥{{ formatPrice(priceData.avg_price) }}</span>
+            <span>¥{{ formatPrice(priceData.max_price) }}</span>
+          </div>
+        </div>
+        <!-- 定价建议 -->
+        <div class="mt-6 p-4 rounded-xl bg-gradient-to-r from-primary-50 to-accent-50 border border-primary-100">
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">💡</span>
+            <div>
+              <p class="text-sm font-medium text-primary-700">定价建议</p>
+              <p class="text-sm text-text-secondary mt-1">
+                建议售价 <span class="font-bold text-accent-600">¥{{ formatPrice(priceData.avg_price * 0.9) }} - ¥{{ formatPrice(priceData.avg_price * 1.1) }}</span>，
+                参考均价 <span class="font-bold">¥{{ formatPrice(priceData.avg_price) }}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { getPriceHistory } from '../api/index.js'
+const route = useRoute()
+const loading = ref(false)
+const hasData = ref(false)
+const chartView = ref('line')
+const hovered = ref(null)
+const hoverIdx = ref(-1)
+const priceData = ref({
+  brand: '',
+  model: '',
+  avg_price: 0,
+  min_price: 0,
+  max_price: 0,
+  price_points: [],
+})
+const chartWidth = 960
+const chartHeight = 420
+const pad = { t: 20, r: 20, b: 45, l: 70 }
+const chartPoints = computed(() => priceData.value.price_points || [])
+const count = computed(() => chartPoints.value.length)
+const baseline = computed(() => {
+  const ticks = yTicks.value
+  return ticks.length ? ticks[0].value : 0
+})
+const yTicks = computed(() => {
+------------------------------------------------------------------------
+第 40 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 41 / 60 页
+------------------------------------------------------------------------
+  if (!hasData.value) return []
+  const min = priceData.value.min_price * 0.88
+  const max = priceData.value.max_price * 1.12
+  const range = max - min
+  if (range < 1) {
+    const v = Math.round(min)
+    return [{ value: v - 200 }, { value: v }, { value: v + 200 }]
+  }
+  const step = Math.max(1, Math.ceil(range / 6 / 50) * 50)
+  const ticks = []
+  for (let v = Math.floor(min / step) * step; v <= Math.ceil(max / step) * step; v += step) {
+    ticks.push({ value: v })
+  }
+  if (ticks.length < 3) {
+    const mid = Math.round((min + max) / 2)
+    return [{ value: Math.round(min) }, { value: mid }, { value: Math.round(max) }]
+  }
+  return ticks
+})
+const xTicks = computed(() => {
+  const pts = chartPoints.value
+  if (!pts.length) return []
+  const n = pts.length
+  const step = Math.max(1, Math.floor(n / 8))
+  const ticks = []
+  for (let i = 0; i < n; i += step) {
+    ticks.push({ index: i, label: pts[i].date.slice(5) })
+  }
+  const last = ticks[ticks.length - 1]
+  if (last && last.index < n - 2) {
+    ticks.push({ index: n - 1, label: pts[n - 1].date.slice(5) })
+  }
+  return ticks
+})
+function xPos(i) {
+  const pts = chartPoints.value
+  if (pts.length <= 1) return pad.l + (chartWidth - pad.l - pad.r) / 2
+  return pad.l + (i / (pts.length - 1)) * (chartWidth - pad.l - pad.r)
+}
+function yPos(v) {
+  const ticks = yTicks.value
+  if (!ticks.length) return chartHeight / 2
+  const tMin = ticks[0].value
+  const tMax = ticks[ticks.length - 1].value
+  const range = tMax - tMin || 1
+  return pad.t + ((tMax - v) / range) * (chartHeight - pad.t - pad.b)
+}
+const barW = computed(() => {
+  const n = count.value
+  if (!n) return 0
+------------------------------------------------------------------------
+第 41 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 42 / 60 页
+------------------------------------------------------------------------
+  const tw = chartWidth - pad.l - pad.r
+  return Math.max(2, tw / n - 1)
+})
+function barX(i) {
+  const n = count.value
+  if (!n) return 0
+  const tw = chartWidth - pad.l - pad.r
+  return pad.l + i * (tw / n)
+}
+function barColor(price) {
+  const max = priceData.value.max_price || 1
+  const min = priceData.value.min_price || 0
+  const ratio = (price - min) / (max - min || 1)
+  if (ratio < 0.4) return '#22c55e'
+  if (ratio < 0.7) return '#eab308'
+  return '#ef4444'
+}
+// 平滑曲线（Catmull-Rom → Cubic Bezier）
+const smoothPath = computed(() => {
+  const pts = chartPoints.value
+  if (!pts.length) return ''
+  if (pts.length === 1) {
+    const x = xPos(0), y = yPos(pts[0].price)
+    return `M ${x},${y}`
+  }
+  if (pts.length === 2) {
+    return `M ${xPos(0)},${yPos(pts[0].price)} L ${xPos(1)},${yPos(pts[1].price)}`
+  }
+  const points = pts.map((p, i) => ({ x: xPos(i), y: yPos(p.price) }))
+  let d = `M ${points[0].x},${points[0].y}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[Math.min(points.length - 1, i + 2)]
+    const t = 0.35
+    const cp1x = p1.x + (p2.x - p0.x) * t / 3
+    const cp1y = p1.y + (p2.y - p0.y) * t / 3
+    const cp2x = p2.x - (p3.x - p1.x) * t / 3
+    const cp2y = p2.y - (p3.y - p1.y) * t / 3
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`
+  }
+  return d
+})
+const areaPath = computed(() => {
+  if (!smoothPath.value) return ''
+  const lastX = xPos(count.value - 1)
+  const baseY = yPos(baseline.value)
+  const firstX = xPos(0)
+  return `${smoothPath.value} L ${lastX},${baseY} L ${firstX},${baseY} Z`
+------------------------------------------------------------------------
+第 42 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 43 / 60 页
+------------------------------------------------------------------------
+})
+const avgPosition = computed(() => {
+  const range = priceData.value.max_price - priceData.value.min_price || 1
+  return ((priceData.value.avg_price - priceData.value.min_price) / range) * 100
+})
+const tooltipX = computed(() => {
+  if (!hovered.value) return 0
+  const idx = chartPoints.value.indexOf(hovered.value)
+  return Math.min(chartWidth - pad.r - 70, Math.max(pad.l + 70, xPos(idx)))
+})
+const tooltipY = computed(() => {
+  if (!hovered.value) return 0
+  return Math.max(pad.t + 48, yPos(hovered.value.price) - 48)
+})
+const brand = ref('')
+const model = ref('')
+const basePrice = ref(0)
+function formatPrice(v) {
+  if (!v || isNaN(v)) return '0'
+  return Math.round(v).toLocaleString()
+}
+async function loadData() {
+  if (!brand.value || !model.value) return
+  loading.value = true
+  try {
+    const data = await getPriceHistory(brand.value, model.value, 180, basePrice.value)
+    priceData.value = data
+    hasData.value = data.price_points && data.price_points.length > 0
+  } catch (e) {
+    console.error('Failed to load price history:', e)
+    hasData.value = false
+  } finally {
+    loading.value = false
+  }
+}
+onMounted(() => {
+  if (route.query.brand) brand.value = decodeURIComponent(route.query.brand)
+  if (route.query.model) model.value = decodeURIComponent(route.query.model)
+  if (route.query.price) basePrice.value = parseFloat(route.query.price) || 0
+  if (brand.value && model.value) loadData()
+})
+</script>
+<style scoped>
+.axis-label {
+  fill: #a1a1aa;
+  font-size: 10px;
+  font-family: 'Inter', sans-serif;
+}
+.data-point {
+  cursor: pointer;
+------------------------------------------------------------------------
+第 43 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 44 / 60 页
+------------------------------------------------------------------------
+  transition: all 0.15s ease;
+}
+.bar-rect {
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.bar-rect:hover {
+  opacity: 0.8;
+}
+</style>
+<template>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold gradient-text">管理员控制台</h1>
+        <p class="text-text-muted text-sm mt-1">管理平台数据、测试模型效果、审核商品</p>
+      </div>
+      <div class="badge badge-warning">管理员</div>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'users'">
+        <div class="stat-value text-primary-600">{{ stats.overview?.users || 0 }}</div>
+        <div class="stat-label">👤 注册用户</div>
+      </div>
+      <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'review'">
+        <div class="stat-value text-accent-600">{{ stats.overview?.published_items || 0 }}</div>
+        <div class="stat-label">📦 已发布商品</div>
+      </div>
+      <div class="stat-card cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all" @click="activeTab = 'cases'">
+        <div class="stat-value text-warning-600">{{ stats.model_performance?.hard_cases?.unfixed || 0 }}</div>
+        <div class="stat-label">🔧 待修复错误案例</div>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        class="pill-button"
+        :class="activeTab === tab.id ? 'pill-button-active' : 'pill-button-inactive'"
+        @click="activeTab = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+    <transition name="page" mode="out-in">
+      <div :key="activeTab">
+      <!-- ==================== 数据概览 ==================== -->
+      <div v-if="activeTab === 'stats'" class="space-y-6">
+        <div class="glass-card">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
+------------------------------------------------------------------------
+第 44 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 45 / 60 页
+------------------------------------------------------------------------
+            <div class="flex items-center justify-between">
+              <h2 class="font-semibold text-text-primary">📊 系统数据概览</h2>
+              <button @click="doSyncQdrant" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-100 text-accent-700 border border-accent-200 hover:bg-accent-200 transition-all">
+                🔄 同步向量库
+              </button>
+            </div>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.total_items || 0 }}</div>
+                <div class="text-xs text-text-muted">商品总数</div>
+              </div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.categories || 0 }}</div>
+                <div class="text-xs text-text-muted">品类数</div>
+              </div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.brands || 0 }}</div>
+                <div class="text-xs text-text-muted">品牌数</div>
+              </div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.audit_logs || 0 }}</div>
+                <div class="text-xs text-text-muted">审计日志</div>
+              </div>
+              <div class="bg-surface-secondary rounded-xl p-4">
+                <div class="text-2xl font-bold text-text-primary">{{ stats.overview?.notifications || 0 }}</div>
+                <div class="text-xs text-text-muted">通知数</div>
+              </div>
+            </div>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div>
+                <h3 class="text-sm font-semibold text-text-secondary mb-3">模型错误案例统计</h3>
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-text-muted">总错误案例</span>
+                    <span class="font-semibold">{{ stats.model_performance?.hard_cases?.total || 0 }}</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-text-muted">已修复</span>
+                    <span class="font-semibold text-accent-600">{{ stats.model_performance?.hard_cases?.fixed || 0 }}</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-text-muted">待修复</span>
+                    <span class="font-semibold text-warning-600">{{ stats.model_performance?.hard_cases?.unfixed || 0 }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+------------------------------------------------------------------------
+第 45 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 46 / 60 页
+------------------------------------------------------------------------
+        </div>
+      </div>
+      <!-- ==================== 模型测试 ==================== -->
+      <div v-else-if="activeTab === 'test'" key="test" class="space-y-6">
+        <div class="glass-card">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border">
+            <h2 class="font-semibold text-text-primary">🧪 模型测试</h2>
+          </div>
+          <div class="p-6">
+            <div
+              class="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary-300 transition-colors cursor-pointer"
+              @click="$refs.fileInput.click()" @dragover.prevent @drop.prevent="handleDrop"
+            >
+              <div v-if="!testImage" class="space-y-3">
+                <div class="text-4xl">📷</div>
+                <p class="text-text-muted">点击或拖拽上传图片进行模型测试</p>
+                <p class="text-xs text-text-light">支持 JPG、PNG 格式 · 可连续上传测试多张</p>
+              </div>
+              <div v-else class="flex flex-col items-center">
+                <img :src="testImage" class="max-h-48 rounded-lg object-contain" />
+                <p class="text-sm text-text-secondary mt-2">{{ testImageName }}</p>
+              </div>
+              <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="handleFileSelect" />
+            </div>
+            <!-- 批量测试 -->
+            <div class="flex items-center gap-3 mt-4">
+              <button
+                class="btn-primary flex-1"
+                :disabled="!testImage || testing"
+                @click="doTestModel"
+              >
+                <span v-if="testing" class="loading-spinner mr-2" />
+                <span>{{ testing ? '模型测试中...' : '🚀 开始单张测试' }}</span>
+              </button>
+              <button
+                class="btn-outline"
+                :disabled="!testImage || testing"
+                @click="doBatchTest"
+              >
+                批量测试 ({{ batchCount }}张)
+              </button>
+            </div>
+            <!-- 批量测试结果统计 -->
+            <div v-if="batchResults.length > 0" class="mt-4 glass-card p-4 bg-accent-50">
+              <h3 class="text-sm font-semibold text-accent-700 mb-3">📊 批量测试结果</h3>
+              <div class="grid grid-cols-4 gap-3 text-center">
+                <div>
+                  <div class="text-xl font-bold text-text-primary">{{ batchResults.length }}</div>
+                  <div class="text-xs text-text-muted">总测试数</div>
+                </div>
+------------------------------------------------------------------------
+第 46 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 47 / 60 页
+------------------------------------------------------------------------
+                <div>
+                  <div class="text-xl font-bold text-accent-600">{{ batchAgreeCount }}</div>
+                  <div class="text-xs text-text-muted">模型一致</div>
+                </div>
+                <div>
+                  <div class="text-xl font-bold text-warning-600">{{ batchDisagreeCount }}</div>
+                  <div class="text-xs text-text-muted">模型不一致</div>
+                </div>
+                <div>
+                  <div class="text-xl font-bold text-text-primary">{{ batchAgreementRate }}%</div>
+                  <div class="text-xs text-text-muted">一致率</div>
+                </div>
+              </div>
+              <button class="btn-secondary-sm mt-3" @click="batchResults = []">清除结果</button>
+            </div>
+            <!-- 单张测试结果 -->
+            <div v-if="testResult" class="mt-6 space-y-4">
+              <div class="glass-card">
+                <div class="px-4 py-3 border-b border-border">
+                  <h3 class="font-semibold text-sm">测试结果</h3>
+                </div>
+                <div class="p-4">
+                  <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <h4 class="text-xs font-medium text-text-muted mb-2">最终识别结果</h4>
+                      <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs text-text-muted w-16">品类</span>
+                          <span class="font-medium">{{ testResult.final_result?.category || '-' }}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs text-text-muted w-16">品牌</span>
+                          <span class="font-medium">{{ testResult.final_result?.brand || '-' }}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs text-text-muted w-16">型号</span>
+                          <span class="font-medium">{{ testResult.final_result?.model || '-' }}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs text-text-muted w-16">市场均价</span>
+                          <span class="font-medium">¥{{ testResult.final_result?.market_avg_price || 0 }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 class="text-xs font-medium text-text-muted mb-2">模型对比</h4>
+                      <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                          <span class="text-xs">YOLO识别</span>
+                          <span :class="testResult.model_comparison?.yolo?.success ? 'text-accent-600' : 'text-danger-600'">
+------------------------------------------------------------------------
+第 47 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 48 / 60 页
+------------------------------------------------------------------------
+                            {{ testResult.model_comparison?.yolo?.success ? '✓ 成功' : '✗ 失败' }}
+                          </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                          <span class="text-xs">Qwen识别</span>
+                          <span :class="testResult.model_comparison?.qwen?.success ? 'text-accent-600' : 'text-danger-600'">
+                            {{ testResult.model_comparison?.qwen?.success ? '✓ 成功' : '✗ 失败' }}
+                          </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                          <span class="text-xs">瑕疵检测</span>
+                          <span :class="testResult.defect_result?.success ? 'text-accent-600' : 'text-danger-600'">
+                            {{ testResult.defect_result?.success ? '✓ 成功 (' + (testResult.defect_result?.defect_count || 0) + '处)' : '✗ 失败' }}
+                          </span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                          <span class="text-xs">模型一致性</span>
+                          <span :class="testResult.model_comparison?.has_disagreement ? 'text-warning-600' : 'text-accent-600'">
+                            {{ testResult.model_comparison?.has_disagreement ? '⚠ 不一致' : '✓ 一致' }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 模型不一致提示 -->
+              <div v-if="testResult.model_comparison?.has_disagreement" class="glass-card bg-warning-50">
+                <div class="px-4 py-3 border-b border-warning-200">
+                  <h3 class="font-semibold text-sm text-warning-700">⚠️ 模型结果不一致</h3>
+                </div>
+                <div class="p-4">
+                  <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-white rounded-lg p-3">
+                      <div class="text-xs text-text-muted mb-1">自研YOLO模型</div>
+                      <div class="font-semibold">{{ testResult.model_comparison?.yolo?.category || '-' }}</div>
+                      <div class="text-xs text-text-muted">置信度: {{ (testResult.model_comparison?.yolo?.confidence * 100)?.toFixed(1) || 0 }}%</div>
+                    </div>
+                    <div class="bg-white rounded-lg p-3">
+                      <div class="text-xs text-text-muted mb-1">阿里云Qwen模型</div>
+                      <div class="font-semibold">{{ testResult.model_comparison?.qwen?.category || '-' }}</div>
+                      <div class="text-xs text-text-muted">品牌: {{ testResult.model_comparison?.qwen?.brand || '-' }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 瑕疵检测结果（含标注图） -->
+              <div v-if="testResult.defect_result?.defect_count > 0" class="glass-card">
+                <div class="px-4 py-3 border-b border-border bg-gradient-to-r from-danger-50 to-warning-50">
+                  <h3 class="font-semibold text-sm text-danger-700">🔍 瑕疵检测结果</h3>
+------------------------------------------------------------------------
+第 48 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 49 / 60 页
+------------------------------------------------------------------------
+                </div>
+                <div class="p-4">
+                  <div class="flex flex-col md:flex-row gap-4">
+                    <!-- 标注图 -->
+                    <div v-if="testResult.defect_result?.annotated_url" class="flex-shrink-0">
+                      <p class="text-xs text-text-muted mb-2">瑕疵标注图：</p>
+                      <img
+                        :src="testResult.defect_result.annotated_url"
+                        class="max-h-72 rounded-lg object-contain border border-border shadow-sm"
+                        alt="瑕疵标注图"
+                      />
+                    </div>
+                    <div class="flex-1">
+                      <div class="flex items-center gap-3 mb-3">
+                        <div class="text-3xl font-bold text-danger-600">{{ testResult.defect_result.defect_count }}</div>
+                        <div>
+                          <div class="text-sm text-text-muted">处瑕疵</div>
+                          <div class="text-xs text-text-light">详见下方标签</div>
+                        </div>
+                      </div>
+                      <div class="flex flex-wrap gap-2">
+                        <span v-for="(defect, index) in testResult.defect_result?.defects" :key="index"
+                          class="badge"
+                          :class="getDefectBadgeClass(defect.severity)">
+                          {{ defect.type_cn }}
+                          <span class="text-xs ml-1 opacity-75">
+                            ({{ (defect.confidence * 100).toFixed(0) }}%
+                            <template v-if="defect.severity_label"> · {{ defect.severity_label }}</template>)
+                          </span>
+                        </span>
+                      </div>
+                      <!-- 瑕疵统计 -->
+                      <div v-if="defectTypeSummary.length > 0" class="mt-4 grid grid-cols-2 gap-2">
+                        <div v-for="dt in defectTypeSummary" :key="dt.type" class="flex items-center justify-between text-xs">
+                          <span class="text-text-muted">{{ dt.type_cn }}</span>
+                          <span class="font-semibold">{{ dt.count }}处</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- 原图对比 -->
+              <div v-if="testResult.image_urls?.length" class="mt-2">
+                <p class="text-xs text-text-muted mb-2">原图：</p>
+                <img :src="testResult.image_urls[0]" class="max-h-48 rounded-lg object-contain border border-border" />
+              </div>
+            </div>
+          </div>
+        </div>
+------------------------------------------------------------------------
+第 49 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 50 / 60 页
+------------------------------------------------------------------------
+      </div>
+      <!-- ==================== 商品审核 ==================== -->
+      <div v-else-if="activeTab === 'review'" key="review" class="space-y-6">
+        <div class="glass-card">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between flex-wrap gap-3">
+            <h2 class="font-semibold text-text-primary">🔍 商品审核</h2>
+            <div class="flex items-center gap-2">
+              <input
+                v-model="reviewSearch"
+                placeholder="搜索商品..."
+                class="input-field-sm w-40"
+                autocomplete="off"
+              />
+              <select v-model="reviewStatusFilter" class="input-field-sm w-32" @change="loadReviewItems">
+                <option value="">全部状态</option>
+                <option value="normal">正常</option>
+                <option value="flagged">待审核</option>
+                <option value="forced_delisted">已强制下架</option>
+              </select>
+            </div>
+          </div>
+          <div class="p-6">
+            <div v-if="filteredReviewItems.length === 0" class="text-center py-8 text-text-muted">
+              <div class="text-4xl mb-2">📭</div>
+              <p>{{ reviewItems.length === 0 ? '暂无商品数据' : '没有匹配的商品' }}</p>
+            </div>
+            <div v-else class="space-y-4">
+              <div v-for="item in filteredReviewItems" :key="item.id" class="glass-card p-4">
+                <div class="flex gap-4">
+                  <img
+                    :src="item.original_image_url"
+                    class="w-24 h-24 rounded-lg object-cover flex-shrink-0"
+                    @error="e => e.target.style.display = 'none'"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                      <h3 class="font-semibold text-text-primary truncate">{{ item.ai_generated_title }}</h3>
+                      <span :class="getStatusClass(item.review_status)" class="badge">{{ getStatusText(item.review_status) }}</span>
+                    </div>
+                    <div class="flex items-center gap-4 mt-1 text-xs text-text-muted flex-wrap">
+                      <span>👤 {{ item.username }}</span>
+                      <span>{{ item.category }} / {{ item.brand }} / {{ item.model }}</span>
+                      <span class="text-accent-600 font-semibold">¥{{ item.suggested_price }}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-3">
+                      <button
+                        v-if="item.status === 'published' && item.review_status !== 'forced_delisted'"
+                        class="btn-danger-sm"
+                        @click="confirmForceDelist(item)"
+                      >
+------------------------------------------------------------------------
+第 50 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 51 / 60 页
+------------------------------------------------------------------------
+                        强制下架
+                      </button>
+                      <span class="text-xs text-text-muted">{{ formatDate(item.created_at) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ==================== 训练指标 ==================== -->
+      <div v-else-if="activeTab === 'metrics'" key="metrics" class="space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- 模型卡片模板 -->
+          <template v-for="m in [
+            { key: 'yolo', title: '分类模型', subtitle: 'YOLOv8n 商品分类识别', icon: '🔍', color: 'blue', data: yoloMetrics },
+            { key: 'defect', title: '瑕疵检测模型', subtitle: 'YOLOv8n 缺陷检测与成色分级', icon: '🔬', color: 'amber', data: defectMetrics }
+          ]" :key="m.key">
+            <div class="glass-card overflow-hidden">
+              <div :class="`bg-gradient-to-r ${m.color === 'blue' ? 'from-blue-500 to-blue-600' : 'from-amber-500 to-orange-600'} px-6 py-4`">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-white text-lg font-bold">{{ m.icon }}</div>
+                    <div>
+                      <h3 class="font-bold text-white text-lg">{{ m.title }}</h3>
+                      <p class="text-xs opacity-80">{{ m.subtitle }}</p>
+                    </div>
+                  </div>
+                  <div v-if="m.data.train_date" class="text-right text-xs text-white/70">
+                    <div>训练日期</div>
+                    <div class="font-medium">{{ m.data.train_date?.slice(0, 10) }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="p-5 space-y-4">
+                <template v-if="m.data.train_metrics">
+                  <!-- 核心指标 -->
+                  <div class="grid grid-cols-2 gap-2">
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.precision) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">精确率 Precision</div>
+                    </div>
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.recall) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">召回率 Recall</div>
+                    </div>
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.map50) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">mAP@50</div>
+------------------------------------------------------------------------
+第 51 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 52 / 60 页
+------------------------------------------------------------------------
+                    </div>
+                    <div :class="`${m.color === 'blue' ? 'bg-blue-50' : 'bg-amber-50'} rounded-xl p-3 text-center`">
+                      <div :class="`text-xl font-extrabold ${m.color === 'blue' ? 'text-blue-700' : 'text-amber-700'}`">{{ fmtPct(m.data.train_metrics.map50_95) }}</div>
+                      <div :class="`text-xs ${m.color === 'blue' ? 'text-blue-500' : 'text-amber-500'} mt-0.5`">mAP@50-95</div>
+                    </div>
+                  </div>
+                  <!-- Loss 曲线 -->
+                  <div class="border-t border-border pt-3">
+                    <div class="text-xs text-text-muted font-medium mb-2">验证 Loss</div>
+                    <div class="grid grid-cols-3 gap-2">
+                      <div class="bg-surface-secondary rounded-lg p-2 text-center">
+                        <div class="text-sm font-semibold text-text-primary">{{ m.data.train_metrics.box_loss?.toFixed(3) }}</div>
+                        <div class="text-xs text-text-muted">Box</div>
+                      </div>
+                      <div class="bg-surface-secondary rounded-lg p-2 text-center">
+                        <div class="text-sm font-semibold text-text-primary">{{ m.data.train_metrics.cls_loss?.toFixed(3) }}</div>
+                        <div class="text-xs text-text-muted">Cls</div>
+                      </div>
+                      <div class="bg-surface-secondary rounded-lg p-2 text-center">
+                        <div class="text-sm font-semibold text-text-primary">{{ m.data.train_metrics.dfl_loss?.toFixed(3) }}</div>
+                        <div class="text-xs text-text-muted">DFL</div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- 模型参数 -->
+                  <div class="border-t border-border pt-3">
+                    <div class="text-xs text-text-muted font-medium mb-2">核心训练参数</div>
+                    <div class="grid grid-cols-3 gap-x-3 gap-y-1.5 text-xs">
+                      <div class="flex justify-between"><span class="text-text-muted">基础模型</span><span class="font-medium">{{ m.data.train_params?.base_model || '-' }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">训练轮数</span><span class="font-medium">{{ m.data.train_params?.epochs }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">Batch</span><span class="font-medium">{{ m.data.train_params?.batch_size }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">图片尺寸</span><span class="font-medium">{{ m.data.train_params?.image_size }}px</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">学习率</span><span class="font-medium">{{ m.data.train_params?.learning_rate }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">优化器</span><span class="font-medium">{{ m.data.train_params?.optimizer }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">设备</span><span class="font-medium">{{ m.data.train_params?.device }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">Dropout</span><span class="font-medium">{{ m.data.train_params?.dropout }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">Cos LR</span><span class="font-medium">{{ m.data.train_params?.cos_lr ? '✓' : '✗' }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">类别数</span><span class="font-medium">{{ m.data.model_arch?.num_classes }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">模型大小</span><span class="font-medium">{{ m.data.file_size_kb ? (m.data.file_size_kb / 1024).toFixed(1) + ' MB' : '-' }}</span></div>
+                      <div class="flex justify-between"><span class="text-text-muted">训练耗时</span><span class="font-medium">{{ fmtTime(m.data.training_time_seconds) }}</span></div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="text-center py-8 text-text-muted">
+                  <div class="text-4xl mb-2">📊</div>
+                  <p class="text-sm">{{ m.data.error || '暂无训练数据' }}</p>
+                </div>
+              </div>
+            </div>
+          </template>
+------------------------------------------------------------------------
+第 52 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 53 / 60 页
+------------------------------------------------------------------------
+        </div>
+      </div>
+      <!-- ==================== 错误案例 ==================== -->
+      <div v-else-if="activeTab === 'cases'" key="cases" class="space-y-6">
+        <div class="glass-card">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
+            <h2 class="font-semibold text-text-primary">📝 错误案例管理</h2>
+            <select v-model="casesFilter" class="input-field-sm w-32" @change="loadHardCases">
+              <option :value="false">待修复</option>
+              <option :value="true">已修复</option>
+            </select>
+          </div>
+          <div class="p-6">
+            <div v-if="hardCases.length === 0" class="text-center py-8 text-text-muted">
+              <div class="text-4xl mb-2">📋</div>
+              <p>暂无错误案例</p>
+            </div>
+            <div v-else class="space-y-4">
+              <div v-for="itemCase in hardCases" :key="itemCase.id" class="glass-card p-4">
+                <div class="flex gap-4">
+                  <img :src="itemCase.image_url" class="w-20 h-20 rounded-lg object-cover" />
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                      <span class="badge badge-danger">错误: {{ itemCase.wrong_label }}</span>
+                      <span class="badge badge-success">正确: {{ itemCase.correct_label }}</span>
+                    </div>
+                    <div class="flex items-center gap-4 mt-2 text-xs text-text-muted">
+                      <span>置信度: {{ itemCase.confidence ? (itemCase.confidence * 100).toFixed(2) + '%' : '-' }}</span>
+                      <span>重试: {{ itemCase.retry_count }}次</span>
+                      <span>{{ formatDate(itemCase.created_at) }}</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center">
+                    <button
+                      v-if="!itemCase.is_fixed"
+                      class="btn-success-sm"
+                      @click="markCaseFixed(itemCase.id)"
+                    >
+                      标记已修复
+                    </button>
+                    <span v-else class="badge badge-success">已修复</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ==================== 用户管理 ==================== -->
+      <div v-if="activeTab === 'users'" key="users" class="space-y-6">
+------------------------------------------------------------------------
+第 53 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 54 / 60 页
+------------------------------------------------------------------------
+        <div class="glass-card">
+          <div class="bg-gradient-to-r from-primary-50 to-accent-50 px-6 py-4 border-b border-border flex items-center justify-between">
+            <h2 class="font-semibold text-text-primary">👤 用户管理</h2>
+            <span class="text-xs text-text-muted">{{ adminUsers.length }} 个用户</span>
+          </div>
+          <div class="p-6">
+            <!-- 新增用户 -->
+            <div class="flex gap-3 mb-6">
+              <input v-model="newUsername" placeholder="用户名" class="input-field flex-1" />
+              <input v-model="newPassword" placeholder="密码" class="input-field flex-1" type="password" />
+              <select v-model="newUserRole" class="input-field w-28">
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select>
+              <button class="btn-primary-sm whitespace-nowrap" @click="addUser" :disabled="!newUsername || !newPassword">➕ 添加</button>
+            </div>
+            <!-- 用户列表 -->
+            <div class="space-y-2">
+              <div v-for="u in adminUsers" :key="u.id" class="flex items-center justify-between px-4 py-3 border border-border rounded-xl hover:bg-surface-secondary transition-colors">
+                <div class="flex items-center gap-4">
+                  <span class="font-medium text-text-primary">{{ u.username }}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full" :class="u.role === 'admin' ? 'bg-warning-100 text-warning-700' : 'bg-primary-100 text-primary-700'">{{ u.role }}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full" :class="u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">{{ u.status === 'active' ? '正常' : '已禁用' }}</span>
+                  <span class="text-xs text-text-muted">{{ u.created_at?.slice(0,10) }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button @click="toggleUser(u)" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    :class="u.status === 'active' ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-600 border border-green-200 hover:bg-green-100'">
+                    {{ u.status === 'active' ? '🔒 禁用' : '🔓 启用' }}
+                  </button>
+                  <button @click="deleteUser(u)" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">🗑 删除</button>
+                </div>
+              </div>
+              <div v-if="!adminUsers.length" class="text-center py-8 text-text-muted">暂无用户</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div> <!-- end :key wrapper -->
+    </transition>
+  </div>
+</template>
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  getAdminSystemStats,
+  testModel,
+  getAdminReviewItems,
+  forceDelistItem,
+------------------------------------------------------------------------
+第 54 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 55 / 60 页
+------------------------------------------------------------------------
+  getCheckpointMetrics,
+  getAdminUsers,
+  createAdminUser,
+  deleteAdminUser,
+  toggleUserStatus,
+  getAdminHardCases,
+  markHardCaseFixed,
+  syncQdrant,
+} from '../api/index.js'
+const router = useRouter()
+const tabs = [
+  { id: 'stats', label: '📊 数据概览' },
+  { id: 'test', label: '🧪 模型测试' },
+  { id: 'review', label: '🔍 商品审核' },
+  { id: 'metrics', label: '📈 训练指标' },
+  { id: 'cases', label: '📝 错误案例' },
+  { id: 'users', label: '👤 用户管理' },
+]
+const activeTab = ref('stats')
+// ==================== Stats ====================
+const stats = ref({})
+// ==================== Test ====================
+const testImage = ref(null)
+const testImageName = ref('')
+const testing = ref(false)
+const testResult = ref(null)
+const batchResults = ref([])
+const batchCount = ref(1)
+const fileInput = ref(null)  // ✅ 修复：Vue ref 替代 document.querySelector
+// ==================== Review ====================
+const reviewItems = ref([])
+const reviewStatusFilter = ref('')
+const reviewSearch = ref('')
+// ==================== Metrics ====================
+const yoloMetrics = ref({})
+const defectMetrics = ref({})
+function fmtPct(val) {
+  if (val == null || isNaN(val)) return '-'
+  return (val * 100).toFixed(2) + '%'
+}
+function fmtTime(seconds) {
+  if (!seconds || seconds <= 0) return '-'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+// ==================== Users ====================
+const adminUsers = ref([])
+const newUsername = ref('')
+------------------------------------------------------------------------
+第 55 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 56 / 60 页
+------------------------------------------------------------------------
+const newPassword = ref('')
+const newUserRole = ref('user')
+// ==================== Cases ====================
+const hardCases = ref([])
+const casesFilter = ref(false)
+// ==================== Computed ====================
+const filteredReviewItems = computed(() => {
+  if (!reviewSearch.value) return reviewItems.value
+  const q = reviewSearch.value.toLowerCase()
+  return reviewItems.value.filter(item =>
+    (item.ai_generated_title || '').toLowerCase().includes(q) ||
+    (item.username || '').toLowerCase().includes(q) ||
+    (item.brand || '').toLowerCase().includes(q) ||
+    (item.model || '').toLowerCase().includes(q)
+  )
+})
+const batchAgreeCount = computed(() =>
+  batchResults.value.filter(r => !r.model_comparison?.has_disagreement).length
+)
+const batchDisagreeCount = computed(() =>
+  batchResults.value.filter(r => r.model_comparison?.has_disagreement).length
+)
+const batchAgreementRate = computed(() => {
+  if (batchResults.value.length === 0) return 0
+  return Math.round((batchAgreeCount.value / batchResults.value.length) * 100)
+})
+// 瑕疵类型统计
+const defectTypeSummary = computed(() => {
+  if (!testResult.value?.defect_result?.defects) return []
+  const map = {}
+  for (const d of testResult.value.defect_result.defects) {
+    const key = d.type_cn || d.type || '未知'
+    if (!map[key]) map[key] = { type_cn: key, count: 0 }
+    map[key].count++
+  }
+  return Object.values(map)
+})
+// ==================== Methods ====================
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
+function getStatusClass(status) {
+  switch (status) {
+    case 'normal': return 'badge-default'
+    case 'flagged': return 'badge-warning'
+    case 'forced_delisted': return 'badge-danger'
+    default: return 'badge-default'
+  }
+}
+------------------------------------------------------------------------
+第 56 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 57 / 60 页
+------------------------------------------------------------------------
+function getStatusText(status) {
+  switch (status) {
+    case 'normal': return '正常'
+    case 'flagged': return '待审核'
+    case 'forced_delisted': return '已强制下架'
+    default: return status
+  }
+}
+function getDefectBadgeClass(severity) {
+  switch (severity) {
+    case 'severe': return 'badge-danger'
+    case 'moderate': return 'badge-warning'
+    case 'minor': return 'badge-default'
+    case 'slight': return 'badge-default'
+    default: return 'badge-warning'
+  }
+}
+// ==================== Load Data ====================
+async function loadStats() {
+  try {
+    stats.value = await getAdminSystemStats()
+  } catch (e) {
+    console.error('加载统计失败:', e)
+    if (e.response?.status === 403) {
+      router.push('/')
+    }
+  }
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0]
+  if (file) {
+    testImageName.value = file.name
+    testImage.value = URL.createObjectURL(file)
+  }
+}
+function handleDrop(e) {
+  const file = e.dataTransfer.files[0]
+  if (file && file.type.startsWith('image/')) {
+    testImageName.value = file.name
+    testImage.value = URL.createObjectURL(file)
+  }
+}
+async function doTestModel() {
+  if (!testImage.value) return
+  testing.value = true
+  testResult.value = null
+  // ✅ 修复：使用 Vue ref 替代 document.querySelector
+  const formData = new FormData()
+  if (fileInput.value && fileInput.value.files[0]) {
+    formData.append('image', fileInput.value.files[0])
+------------------------------------------------------------------------
+第 57 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 58 / 60 页
+------------------------------------------------------------------------
+  }
+  try {
+    const result = await testModel(formData)
+    testResult.value = result
+  } catch (e) {
+    console.error('模型测试失败:', e)
+    alert('模型测试失败: ' + (e.message || '未知错误'))
+  } finally {
+    testing.value = false
+  }
+}
+async function doBatchTest() {
+  if (!testImage.value) return
+  testing.value = true
+  batchResults.value = []
+  // ✅ 修复：使用 Vue ref
+  const file = fileInput.value?.files?.[0]
+  if (!file) return
+  for (let i = 0; i < batchCount.value; i++) {
+    const formData = new FormData()
+    formData.append('image', file)
+    try {
+      const result = await testModel(formData)
+      batchResults.value.push(result)
+    } catch (e) {
+      console.error(`批量测试 ${i + 1}/${batchCount.value} 失败:`, e)
+    }
+  }
+  testing.value = false
+  alert(`批量测试完成：${batchResults.value.length}/${batchCount.value} 次`)
+}
+async function loadReviewItems() {
+  try {
+    const params = reviewStatusFilter.value ? { review_status: reviewStatusFilter.value } : {}
+    const result = await getAdminReviewItems(params)
+    reviewItems.value = result.items || []
+  } catch (e) {
+    console.error('加载审核列表失败:', e)
+  }
+}
+async function confirmForceDelist(item) {
+  if (!confirm(`确定要强制下架商品「${item.ai_generated_title}」吗？`)) return
+  const reason = prompt('请输入下架原因（用户将收到此通知）:', '商品经管理员审核不符合平台规范，请修改后重新发布')
+  if (!reason) return
+  try {
+    await forceDelistItem(item.id, reason)
+    loadReviewItems()
+    alert('✅ 商品已强制下架，用户已收到通知')
+  } catch (e) {
+    alert('❌ 操作失败: ' + (e.message || '未知错误'))
+------------------------------------------------------------------------
+第 58 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 59 / 60 页
+------------------------------------------------------------------------
+  }
+}
+async function loadModelMetrics() {
+  try {
+    const result = await getCheckpointMetrics()
+    if (result.success && result.models) {
+      yoloMetrics.value = result.models.yolo || { error: '无数据' }
+      defectMetrics.value = result.models.defect || { error: '无数据' }
+    }
+  } catch (e) {
+    console.error('加载模型指标失败:', e)
+  }
+}
+async function loadHardCases() {
+  try {
+    const result = await getAdminHardCases({ is_fixed: casesFilter.value })
+    hardCases.value = result.cases || []
+  } catch (e) {
+    console.error('加载错误案例失败:', e)
+  }
+}
+async function markCaseFixed(caseId) {
+  try {
+    await markHardCaseFixed(caseId)
+    loadHardCases()
+    alert('✅ 错误案例已标记为已修复')
+  } catch (e) {
+    alert('❌ 操作失败: ' + (e.message || '未知错误'))
+  }
+}
+// ==================== Users ====================
+async function loadUsers() {
+  try {
+    const result = await getAdminUsers()
+    adminUsers.value = result.users || []
+  } catch (e) { console.error('加载用户失败:', e) }
+}
+async function addUser() {
+  if (!newUsername.value || !newPassword.value) return
+  try {
+    await createAdminUser(newUsername.value.trim(), newPassword.value, newUserRole.value)
+    newUsername.value = ''
+    newPassword.value = ''
+    loadUsers()
+    loadStats()
+  } catch (e) { alert('添加失败: ' + (e?.response?.data?.detail || e.message)) }
+}
+async function deleteUser(u) {
+  if (!confirm(`确定要删除用户「${u.username}」吗？此操作不可恢复。`)) return
+  try {
+------------------------------------------------------------------------
+第 59 / 60 页
+
+
+智能二手商品发布助手 V1.0                                        第 60 / 60 页
+------------------------------------------------------------------------
+    await deleteAdminUser(u.id)
+    loadUsers()
+    loadStats()
+  } catch (e) { alert('删除失败: ' + (e?.response?.data?.detail || e.message)) }
+}
+async function toggleUser(u) {
+  const action = u.status === 'active' ? '禁用' : '启用'
+  if (!confirm(`确定要${action}用户「${u.username}」吗？${u.status === 'active' ? '禁用后该用户将无法登录。' : ''}`)) return
+  try {
+    await toggleUserStatus(u.id)
+    loadUsers()
+  } catch (e) { alert('操作失败: ' + (e?.response?.data?.detail || e.message)) }
+}
+async function doSyncQdrant() {
+  try {
+    const result = await syncQdrant()
+    alert(`同步完成！总数: ${result.total}, 已索引: ${result.indexed}, 失败: ${result.failed}`)
+    loadStats()
+  } catch (e) { alert('同步失败: ' + (e?.response?.data?.detail || e.message)) }
+}
+// ==================== Lifecycle ====================
+watch(activeTab, (tab) => {
+  if (tab === 'stats') loadStats()
+  else if (tab === 'review') loadReviewItems()
+  else if (tab === 'metrics') loadModelMetrics()
+  else if (tab === 'cases') loadHardCases()
+  else if (tab === 'users') loadUsers()
+})
+onMounted(() => {
+  loadStats()
+  loadReviewItems()
+  loadModelMetrics()
+  loadHardCases()
+  loadUsers()
+})
+</script>
+<style scoped>
+.input-field-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: white;
+  outline: none;
+}
+.input-field-sm:focus {
+  border-color: var(--color-primary-400);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+</style>
+------------------------------------------------------------------------
+第 60 / 60 页
